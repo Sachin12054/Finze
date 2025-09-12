@@ -1,0 +1,95 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+# expo-env.d.ts (allow this specific file)
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# Firebase
+firebase-debug.log
+firestore-debug.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+.pytest_cache/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ML Models (keep small test models, ignore large trained models)
+# models/large_* (allow models/ directory)
+*.pkl.bz2
+*.joblib
+*.pt
+*.pth
+*.bin
+*.lib
+*.dll
+*.safetensors
+Backend/models/*/pytorch_model.bin
+Backend/models/*/model.safetensors
+Backend/models/*/checkpoint-*
+checkpoint-*//
+
+# Backup files
+*.zip
+Backup/
+
+# Backend (Python ML service)
+Backend/
+
+# Environment variables
+.env
+
+app-example

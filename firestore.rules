@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection - users can only access their own data
+    match /users/{document} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.user_id == request.auth.uid);
+    }
+    
+    // Expenses collection - users can only access their own expenses
+    match /expenses/{document} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.user_id == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.user_id == request.auth.uid;
+    }
+    
+    // Budgets collection - users can only access their own budgets
+    match /budgets/{document} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.user_id == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.user_id == request.auth.uid;
+    }
+    
+    // Reminders collection - users can only access their own reminders
+    match /reminders/{document} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.user_id == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.user_id == request.auth.uid;
+    }
+    
+    // Transaction History collection - users can only access their own transactions
+    match /transactions_history/{document} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.user_id == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.user_id == request.auth.uid;
+    }
+    
+    // Smart Suggestions collection - users can only access their own suggestions
+    match /smart_suggestions/{document} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.user_id == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.user_id == request.auth.uid;
+    }
+    
+    // Legacy collections for backwards compatibility
+    match /users/{userId}/expenses/{document} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    match /users/{userId}/budgets/{document} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    match /users/{userId}/profile/{document} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    match /users/{userId}/recurring_expenses/{document} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
