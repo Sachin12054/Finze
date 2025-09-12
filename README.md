@@ -28,10 +28,6 @@
 
 ## 🖼️ App Preview
 
-<p align="center">
-   <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExczl3cDJsNmxyZnhoNWhiZjl4ZndpeXlyNnJkc3k1YzJoMHhjYmczayZlcD12MV9naWZzX3NlYXJjaCZjdD1n/WoWm8YzFQJg5i/giphy.gif" alt="App Preview" width="600px" />
-</p>
-
 ---
 
 ## 🛠️ Getting Started
@@ -71,7 +67,7 @@ Finze/
 ---
 
 ## 🎨 Technology Stack
-<p align="center"> <img src="https://skillicons.dev/icons?i=react,expo,js,ts,firebase,python,tensorflow" /> </p>
+<p align="center"><img src="https://skillicons.dev/icons?i=react,expo,js,ts,firebase,python,tensorflow" /></p>
 
 ---
 
