@@ -3,10 +3,6 @@
 
 <h1 align="center">💸 Finze – AI-Powered Personal Finance App</h1>
 
-<p align="center">
-   <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMXM4NjhybGF0NnA3OXh3dnczYThjM3l5OWZmc2o2aWhrZmpvN2Y2eCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xT8qBuhwq0cBLUHgDS/giphy.gif" width="220px" alt="Finze Logo Animation" />
-</p>
-
 <p align="center" style="font-size:1.1rem;">
    <b>Finze</b> is your intelligent, AI-powered personal finance companion.<br>
    Effortlessly track expenses, manage budgets, and gain actionable insights—all in a seamless, modern experience.
@@ -31,10 +27,6 @@
 ---
 
 ## 🖼️ App Preview
-
-<p align="center">
-   <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExczl3cDJsNmxyZnhoNWhiZjl4ZndpeXlyNnJkc3k1YzJoMHhjYmczayZlcD12MV9naWZzX3NlYXJjaCZjdD1n/WoWm8YzFQJg5i/giphy.gif" alt="App Preview" width="600px" />
-</p>
 
 ---
 
@@ -75,7 +67,7 @@ Finze/
 ---
 
 ## 🎨 Technology Stack
-<p align="center"> <img src="https://skillicons.dev/icons?i=react,expo,js,ts,firebase,python,tensorflow" /> </p>
+<p align="center"><img src="https://skillicons.dev/icons?i=react,js,ts,firebase,python,tensorflow" /></p>
 
 ---
 
@@ -87,11 +79,3 @@ Finze leverages advanced machine learning to:
 - Personalize saving tips
 
 ---
-
-## 👥 Contributing
-We welcome contributions from the community!<br>
-For major changes, please open an issue first to discuss your ideas.
-
----
-
-<p align="center"> <b>💚 Enjoying Finze? Leave a ⭐ and help us grow!</b><br><br> <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmkwZm05OW5mcWh0d3RsYXY2anJpcDh3c3N6aGRmcHJzYjl6eDF3MiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/yo1whaKXkR0p13hF1j/giphy.gif" width="180px" /> </p>
