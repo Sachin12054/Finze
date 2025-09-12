@@ -2,41 +2,41 @@ import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import * as LocalAuthentication from "expo-local-authentication";
-import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { deleteUser, signOut, updatePassword, updateProfile } from "firebase/auth";
 import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
-  Dimensions,
-  Image,
-  Linking,
-  Platform,
-  ScrollView,
-  Share,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Vibration,
-  View,
+    Alert,
+    Dimensions,
+    Image,
+    Linking,
+    Platform,
+    ScrollView,
+    Share,
+    StatusBar,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    Vibration,
+    View,
 } from "react-native";
 import Animated, {
-  BounceIn,
-  FadeInDown,
-  FadeInUp,
-  SlideInLeft,
-  SlideInRight,
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring
+    BounceIn,
+    FadeInDown,
+    FadeInUp,
+    SlideInLeft,
+    SlideInRight,
+    useAnimatedStyle,
+    useSharedValue,
+    withSequence,
+    withSpring
 } from "react-native-reanimated";
 import { auth, db } from "../src/services/firebase";
 import { deleteProfileImage, generatePlaceholderAvatar, UploadProgress } from "../src/services/imageUploadService";
+import NotificationService from "../src/services/notificationService";
 
 const { width, height } = Dimensions.get('window');
 
@@ -85,7 +85,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     (async () => {
       const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      const { status: notifStatus } = await Notifications.requestPermissionsAsync();
+      const { status: notifStatus } = await NotificationService.requestPermissionsAsync();
       
       if (mediaStatus !== "granted") {
         Alert.alert("Permission Denied", "Please allow access to the photo library to change your profile picture.");

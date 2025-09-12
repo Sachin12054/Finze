@@ -3,6 +3,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { auth } from '../src/services/firebase';
+import '../src/utils/consoleSuppressions'; // Suppress warnings early
 
 export default function Index() {
   const router = useRouter();
@@ -18,8 +19,8 @@ export default function Index() {
         // User is logged in, redirect to tabs
         router.replace('/(tabs)');
       } else {
-        // User is not logged in, redirect to login
-        router.replace('/auth/login');
+        // User is not logged in, redirect to loading screen
+        router.replace('/auth/loading' as any);
       }
     });
 
@@ -28,7 +29,12 @@ export default function Index() {
 
   // Show loading spinner while checking auth state
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' }}>
+    <View style={{ 
+      flex: 1, 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      backgroundColor: '#0f172a' 
+    }}>
       <ActivityIndicator size="large" color="#10b981" />
     </View>
   );

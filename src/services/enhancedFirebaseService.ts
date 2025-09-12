@@ -25,6 +25,7 @@ export interface UserProfile {
   bio?: string;
   dateOfBirth?: string;
   location?: string;
+  role?: string; // Add role field
   createdAt: string;
   updatedAt: string;
   totalBalance: number;
