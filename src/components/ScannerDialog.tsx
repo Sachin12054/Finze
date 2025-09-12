@@ -34,6 +34,27 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
   // Theme context
   const { isDarkTheme } = useTheme();
   
+  // Theme-aware colors
+  const getThemeColors = () => ({
+    background: isDarkTheme ? '#1e293b' : '#ffffff',
+    surface: isDarkTheme ? '#334155' : '#f8fafc',
+    text: isDarkTheme ? '#f1f5f9' : '#1e293b',
+    textSecondary: isDarkTheme ? '#94a3b8' : '#64748b',
+    border: isDarkTheme ? '#475569' : '#e2e8f0',
+    overlay: isDarkTheme ? 'rgba(0, 0, 0, 0.95)' : 'rgba(0, 0, 0, 0.9)',
+    inputBackground: isDarkTheme ? '#475569' : '#ffffff',
+    placeholder: isDarkTheme ? '#64748b' : '#94a3b8',
+    primary: isDarkTheme ? '#60a5fa' : '#3b82f6',
+    success: isDarkTheme ? '#34d399' : '#10b981',
+    error: isDarkTheme ? '#fb7185' : '#ef4444',
+    warning: isDarkTheme ? '#fbbf24' : '#f59e0b',
+    primarySurface: isDarkTheme ? '#1e40af' : '#eff6ff',
+    successSurface: isDarkTheme ? '#064e3b' : '#f0fdf4',
+  });
+
+  // Get theme colors
+  const colors = getThemeColors();
+  
   const [isProcessing, setIsProcessing] = useState(false);
   const [slideAnimation] = useState(new Animated.Value(0));
   const [scaleAnimation] = useState(new Animated.Value(0.8));
@@ -200,11 +221,12 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
       onRequestClose={handleClose}
       statusBarTranslucent
     >
-      <StatusBar barStyle="light-content" backgroundColor="rgba(0,0,0,0.9)" />
+      <StatusBar barStyle="light-content" backgroundColor={colors.overlay} />
       <Animated.View 
         style={[
           styles.overlay,
           {
+            backgroundColor: colors.overlay,
             opacity: opacityAnimation,
           }
         ]}
@@ -214,6 +236,7 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
             style={[
               styles.container,
               {
+                backgroundColor: colors.background,
                 transform: [
                   {
                     translateY: slideAnimation.interpolate({
@@ -228,27 +251,27 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
             ]}
           >
             {/* Modern Header */}
-            <View style={styles.header}>
+            <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
               <View style={styles.headerTopRow}>
                 <TouchableOpacity
-                  style={styles.backButton}
+                  style={[styles.backButton, { backgroundColor: colors.surface }]}
                   onPress={handleClose}
                   disabled={isProcessing}
                 >
                   <Ionicons 
                     name="arrow-back" 
                     size={24} 
-                    color={isProcessing ? "#94a3b8" : "#1e293b"} 
+                    color={isProcessing ? colors.textSecondary : colors.text} 
                   />
                 </TouchableOpacity>
                 <View style={styles.headerTitleContainer}>
-                  <Text style={styles.headerTitle}>Receipt Scanner</Text>
-                  <Text style={styles.headerSubtitle}>AI-powered expense extraction</Text>
+                  <Text style={[styles.headerTitle, { color: colors.text }]}>Receipt Scanner</Text>
+                  <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>AI-powered expense extraction</Text>
                 </View>
                 <View style={styles.headerRight}>
-                  <View style={styles.aiIndicator}>
-                    <Ionicons name="sparkles" size={16} color="#3b82f6" />
-                    <Text style={styles.aiText}>AI</Text>
+                  <View style={[styles.aiIndicator, { backgroundColor: colors.primarySurface }]}>
+                    <Ionicons name="sparkles" size={16} color={colors.primary} />
+                    <Text style={[styles.aiText, { color: colors.primary }]}>AI</Text>
                   </View>
                 </View>
               </View>
@@ -264,40 +287,40 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
               {isProcessing ? (
                 <View style={styles.processingContainer}>
                   <View style={styles.processingAnimation}>
-                    <View style={styles.scanningLine} />
+                    <View style={[styles.scanningLine, { backgroundColor: colors.primary }]} />
                     <View style={styles.processingIconContainer}>
-                      <ActivityIndicator size="large" color="#3b82f6" />
+                      <ActivityIndicator size="large" color={colors.primary} />
                       <View style={styles.processingIcon}>
-                        <Ionicons name="receipt-outline" size={40} color="#3b82f6" />
+                        <Ionicons name="receipt-outline" size={40} color={colors.primary} />
                       </View>
                     </View>
                   </View>
-                  <Text style={styles.processingTitle}>
+                  <Text style={[styles.processingTitle, { color: colors.text }]}>
                     Analyzing Receipt{processingDots}
                   </Text>
-                  <Text style={styles.processingSubtext}>
+                  <Text style={[styles.processingSubtext, { color: colors.textSecondary }]}>
                     Our AI is extracting expense details from your receipt
                   </Text>
                   
                   {/* Modern Progress Steps */}
                   <View style={styles.progressContainer}>
                     <View style={styles.progressStep}>
-                      <View style={styles.progressIconContainer}>
-                        <Ionicons name="checkmark-circle" size={20} color="#10b981" />
+                      <View style={[styles.progressIconContainer, { backgroundColor: colors.surface }]}>
+                        <Ionicons name="checkmark-circle" size={20} color={colors.success} />
                       </View>
-                      <Text style={styles.progressText}>Image processed</Text>
+                      <Text style={[styles.progressText, { color: colors.text }]}>Image processed</Text>
                     </View>
                     <View style={styles.progressStep}>
-                      <View style={styles.progressIconContainer}>
-                        <ActivityIndicator size={16} color="#3b82f6" />
+                      <View style={[styles.progressIconContainer, { backgroundColor: colors.surface }]}>
+                        <ActivityIndicator size={16} color={colors.primary} />
                       </View>
-                      <Text style={styles.progressText}>Extracting data</Text>
+                      <Text style={[styles.progressText, { color: colors.text }]}>Extracting data</Text>
                     </View>
                     <View style={[styles.progressStep, styles.progressStepPending]}>
-                      <View style={styles.progressIconContainer}>
-                        <Ionicons name="time-outline" size={20} color="#94a3b8" />
+                      <View style={[styles.progressIconContainer, { backgroundColor: colors.surface }]}>
+                        <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
                       </View>
-                      <Text style={[styles.progressText, styles.progressTextPending]}>
+                      <Text style={[styles.progressText, styles.progressTextPending, { color: colors.textSecondary }]}>
                         Finalizing
                       </Text>
                     </View>
@@ -307,13 +330,13 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
                 <>
                   {/* Welcome Section */}
                   <View style={styles.welcomeSection}>
-                    <View style={styles.featureIcon}>
-                      <Ionicons name="scan-circle-outline" size={64} color="#3b82f6" />
+                    <View style={[styles.featureIcon, { backgroundColor: colors.primarySurface }]}>
+                      <Ionicons name="scan-circle-outline" size={64} color={colors.primary} />
                     </View>
-                    <Text style={styles.welcomeTitle}>
+                    <Text style={[styles.welcomeTitle, { color: colors.text }]}>
                       Smart Receipt Scanner
                     </Text>
-                    <Text style={styles.welcomeDescription}>
+                    <Text style={[styles.welcomeDescription, { color: colors.textSecondary }]}>
                       Capture receipts instantly and let our AI extract all expense details automatically.
                     </Text>
                   </View>
@@ -321,7 +344,7 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
                   {/* Action Buttons */}
                   <View style={styles.actionSection}>
                     <TouchableOpacity
-                      style={styles.primaryActionButton}
+                      style={[styles.primaryActionButton, { backgroundColor: colors.primary }]}
                       onPress={handleCameraPick}
                       activeOpacity={0.8}
                     >
@@ -330,27 +353,27 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
                           <Ionicons name="camera" size={28} color="#ffffff" />
                         </View>
                         <View style={styles.actionButtonText}>
-                          <Text style={styles.actionButtonTitle}>Take Photo</Text>
-                          <Text style={styles.actionButtonSubtitle}>Capture receipt instantly</Text>
+                          <Text style={[styles.actionButtonTitle, { color: '#ffffff' }]}>Take Photo</Text>
+                          <Text style={[styles.actionButtonSubtitle, { color: '#ffffff' }]}>Capture receipt instantly</Text>
                         </View>
                         <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.8)" />
                       </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                      style={styles.secondaryActionButton}
+                      style={[styles.secondaryActionButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
                       onPress={handleImagePick}
                       activeOpacity={0.8}
                     >
                       <View style={styles.actionButtonContent}>
                         <View style={styles.secondaryActionButtonIcon}>
-                          <Ionicons name="images" size={28} color="#3b82f6" />
+                          <Ionicons name="images" size={28} color={colors.primary} />
                         </View>
                         <View style={styles.actionButtonText}>
-                          <Text style={styles.secondaryActionButtonTitle}>Choose Photo</Text>
-                          <Text style={styles.secondaryActionButtonSubtitle}>Select from gallery</Text>
+                          <Text style={[styles.secondaryActionButtonTitle, { color: colors.text }]}>Choose Photo</Text>
+                          <Text style={[styles.secondaryActionButtonSubtitle, { color: colors.textSecondary }]}>Select from gallery</Text>
                         </View>
-                        <Ionicons name="chevron-forward" size={24} color="#94a3b8" />
+                        <Ionicons name="chevron-forward" size={24} color={colors.textSecondary} />
                       </View>
                     </TouchableOpacity>
                   </View>
@@ -358,16 +381,16 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
                   {/* Features List */}
                   <View style={styles.featuresSection}>
                     <View style={styles.featureItem}>
-                      <Ionicons name="flash" size={20} color="#10b981" />
-                      <Text style={styles.featureText}>Instant AI recognition</Text>
+                      <Ionicons name="flash" size={20} color={colors.primary} />
+                      <Text style={[styles.featureText, { color: colors.text }]}>Instant AI recognition</Text>
                     </View>
                     <View style={styles.featureItem}>
-                      <Ionicons name="shield-checkmark" size={20} color="#10b981" />
-                      <Text style={styles.featureText}>99% accuracy rate</Text>
+                      <Ionicons name="shield-checkmark" size={20} color={colors.primary} />
+                      <Text style={[styles.featureText, { color: colors.text }]}>99% accuracy rate</Text>
                     </View>
                     <View style={styles.featureItem}>
-                      <Ionicons name="layers" size={20} color="#10b981" />
-                      <Text style={styles.featureText}>Extract all details</Text>
+                      <Ionicons name="layers" size={20} color={colors.primary} />
+                      <Text style={[styles.featureText, { color: colors.text }]}>Extract all details</Text>
                     </View>
                   </View>
 
