@@ -80,10 +80,4 @@ Finze leverages advanced machine learning to:
 
 ---
 
-## 👥 Contributing
-We welcome contributions from the community!<br>
-For major changes, please open an issue first to discuss your ideas.
 
----
-
-<p align="center"> <b>💚 Enjoying Finze? Leave a ⭐ and help us grow!</b><br><br> <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdmkwZm05OW5mcWh0d3RsYXY2anJpcDh3c3N6aGRmcHJzYjl6eDF3MiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/yo1whaKXkR0p13hF1j/giphy.gif" width="180px" /> </p>
