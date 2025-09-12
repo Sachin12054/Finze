@@ -67,7 +67,7 @@ Finze/
 ---
 
 ## 🎨 Technology Stack
-<p align="center"><img src="https://skillicons.dev/icons?i=react,expo,js,ts,firebase,python,tensorflow" /></p>
+<p align="center"><img src="https://skillicons.dev/icons?i=react,js,ts,firebase,python,tensorflow" /></p>
 
 ---
 
