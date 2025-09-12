@@ -1,50 +1,67 @@
-# Welcome to your Expo app 👋
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+# Finze: Personal Finance Management App
 
-## Get started
+Finze is a modern, AI-powered personal finance management app built with React Native and Expo. It helps users track expenses, manage budgets, set savings goals, and gain actionable insights into their financial habits—all in a beautiful, intuitive interface.
 
-1. Install dependencies
+## About the App
+
+Finze empowers individuals to take control of their finances with smart analytics, real-time tracking, and seamless user experience. Leveraging AI for expense categorization and smart suggestions, Finze makes budgeting and saving effortless for everyone.
+
+## Key Features
+
+- **Expense Tracking:** Log and categorize expenses in real time
+- **AI-Powered Categorization:** Automatically categorize transactions using machine learning
+- **Budget Management:** Set monthly budgets and monitor progress
+- **Savings Goals:** Create and track custom savings goals
+- **Recurring Transactions:** Manage subscriptions and recurring expenses
+- **Smart Suggestions:** Get personalized tips to optimize spending and saving
+- **Analytics Dashboard:** Visualize spending patterns and trends
+- **Theme Toggle:** Switch between light and dark modes for a perfect UI
+- **Secure & Private:** Your data stays on your device or your own cloud
+
+## How to Use
+
+1. **Sign Up / Log In:** Create an account or log in securely
+2. **Add Transactions:** Quickly add expenses and incomes, or scan receipts
+3. **Set Budgets & Goals:** Define your monthly budgets and savings targets
+4. **View Analytics:** Explore the dashboard for insights and trends
+5. **Get Smart Suggestions:** Receive AI-driven tips to improve your finances
+6. **Customize Experience:** Switch themes, manage categories, and more
+
+## How to Run the App
+
+1. **Install dependencies**
 
    ```bash
    npm install
    ```
 
-2. Start the app
+2. **Start the app**
 
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+3. **Open on your device or emulator**
+   - Scan the QR code with Expo Go (Android/iOS)
+   - Or run on an emulator/simulator from the Expo CLI
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Project Structure
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- `app/` - Main app screens and navigation
+- `assets/` - Images and fonts
+- `components/` - Reusable UI components
+- `constants/` - App-wide constants
+- `hooks/` - Custom React hooks
+- `ml_model/` - AI/ML models for categorization
+- `models/` - Serialized model files
+- `scripts/` - Utility scripts
+- `src/` - Core business logic, services, and types
 
-## Get a fresh project
+## Contributing
 
-When you're ready, run:
+Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
 
-```bash
-npm run reset-project
-```
+## License
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+This project is licensed under the MIT License.
