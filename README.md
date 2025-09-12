@@ -3,10 +3,6 @@
 
 <h1 align="center">💸 Finze – AI-Powered Personal Finance App</h1>
 
-<p align="center">
-   <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMXM4NjhybGF0NnA3OXh3dnczYThjM3l5OWZmc2o2aWhrZmpvN2Y2eCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xT8qBuhwq0cBLUHgDS/giphy.gif" width="220px" alt="Finze Logo Animation" />
-</p>
-
 <p align="center" style="font-size:1.1rem;">
    <b>Finze</b> is your intelligent, AI-powered personal finance companion.<br>
    Effortlessly track expenses, manage budgets, and gain actionable insights—all in a seamless, modern experience.
