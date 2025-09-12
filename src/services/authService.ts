@@ -23,7 +23,8 @@ export class AuthService {
   static async signUp(
     email: string, 
     password: string, 
-    displayName: string
+    displayName: string,
+    role: string = 'customer'
   ): Promise<AuthUser> {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -42,6 +43,7 @@ export class AuthService {
         totalBalance: 0,
         monthlyIncome: 0,
         monthlyExpenses: 0,
+        role, // Add role to user profile
       });
 
       return {

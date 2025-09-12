@@ -2,12 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
   Platform,
   RefreshControl,
+  Animated as RNAnimated,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -76,6 +77,8 @@ export default function HomeScreen() {
   // Animation values
   const balanceOpacity = useSharedValue(0);
   const cardScale = useSharedValue(0.9);
+  const themeToggleScale = useRef(new RNAnimated.Value(1)).current;
+  const themeToggleRotate = useRef(new RNAnimated.Value(0)).current;
   
   // User and authentication state
   const [user, setUser] = useState<any>(null);
@@ -124,6 +127,31 @@ export default function HomeScreen() {
     .reduce((sum, t) => sum + t.amount, 0);
   const totalBudgetAmount = budgets.reduce((sum, budget) => sum + budget.amount, 0);
   const budgetProgress = totalBudgetAmount > 0 ? (currentMonthExpenseAmount / totalBudgetAmount) * 100 : 0;
+
+  // Theme toggle animation function
+  const animateThemeToggle = () => {
+    RNAnimated.parallel([
+      RNAnimated.sequence([
+        RNAnimated.timing(themeToggleScale, {
+          toValue: 0.85,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+        RNAnimated.timing(themeToggleScale, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]),
+      RNAnimated.timing(themeToggleRotate, {
+        toValue: isDarkTheme ? 0 : 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
+    toggleTheme();
+  };
 
   useEffect(() => {
     // Animate components on load
@@ -359,17 +387,29 @@ export default function HomeScreen() {
                 </Text>
               </View>
               <View style={styles.headerRight}>
-                <TouchableOpacity
-                  style={styles.themeToggle}
-                  onPress={toggleTheme}
-                  accessibilityLabel="Toggle theme"
-                >
-                  <Ionicons 
-                    name={isDarkTheme ? "sunny" : "moon"} 
-                    size={22} 
-                    color="white" 
-                  />
-                </TouchableOpacity>
+                <RNAnimated.View style={{
+                  transform: [
+                    { scale: themeToggleScale },
+                    { 
+                      rotate: themeToggleRotate.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '360deg']
+                      })
+                    }
+                  ]
+                }}>
+                  <TouchableOpacity
+                    style={styles.themeToggle}
+                    onPress={animateThemeToggle}
+                    accessibilityLabel="Toggle theme"
+                  >
+                    <Ionicons 
+                      name={isDarkTheme ? "sunny" : "moon"} 
+                      size={22} 
+                      color="white" 
+                    />
+                  </TouchableOpacity>
+                </RNAnimated.View>
                 <TouchableOpacity
                   style={styles.profileButton}
                   onPress={() => setShowProfileDialog(true)}

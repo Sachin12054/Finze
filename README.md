@@ -64,6 +64,7 @@ Finze/
 └── src/           # Core business logic
 ```
 
+
 ---
 
 ## 🎨 Technology Stack
@@ -79,5 +80,21 @@ Finze leverages advanced machine learning to:
 - Personalize saving tips
 
 ---
+=======
 
+---
+
+## 🎨 Technology Stack
+<p align="center"><img src="https://skillicons.dev/icons?i=react,js,ts,firebase,python,tensorflow" /></p>
+
+---
+
+## 🧠 AI-Powered Insights
+Finze leverages advanced machine learning to:
+- Categorize transactions automatically
+- Predict overspending risk
+- Suggest budget adjustments
+- Personalize saving tips
+
+---
 

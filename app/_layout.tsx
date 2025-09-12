@@ -7,6 +7,7 @@ import 'react-native-get-random-values';
 import 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { ThemeProvider as CustomThemeProvider } from '../src/contexts/ThemeContext';
+import '../src/utils/consoleSuppressions'; // Import warning suppressions
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 
@@ -34,8 +35,13 @@ export default function RootLayout() {
         <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/loading" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/welcome" options={{ headerShown: false }} />
           <Stack.Screen name="auth/login" options={{ headerShown: false }} />
           <Stack.Screen name="auth/signup" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/forgot-password" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/verification" options={{ headerShown: false }} />
+          <Stack.Screen name="auth/new-password" options={{ headerShown: false }} />
           <Stack.Screen name="Profile" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>

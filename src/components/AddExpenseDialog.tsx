@@ -39,6 +39,13 @@ interface AddExpenseDialogProps {
   editingExpense?: any;
 }
 
+interface ValidationErrors {
+  title?: string;
+  amount?: string;
+  category?: string;
+  description?: string;
+}
+
 const CATEGORIES = [
   { id: 'Food & Dining', label: 'Food & Dining', icon: 'restaurant' },
   { id: 'Transportation', label: 'Transportation', icon: 'car' },
@@ -81,6 +88,125 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
   // Animation states
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
+
+  // Validation states
+  const [errors, setErrors] = useState<ValidationErrors>({});
+  const [touched, setTouched] = useState<{ [key: string]: boolean }>({});
+
+  // Validation functions
+  const validateTitle = (value: string): string | undefined => {
+    if (!value.trim()) {
+      return 'Title is required';
+    }
+    if (value.trim().length < 2) {
+      return 'Title must be at least 2 characters long';
+    }
+    if (value.trim().length > 100) {
+      return 'Title must be less than 100 characters';
+    }
+    return undefined;
+  };
+
+  const validateAmount = (value: string): string | undefined => {
+    if (!value.trim()) {
+      return 'Amount is required';
+    }
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) {
+      return 'Please enter a valid number';
+    }
+    if (numValue <= 0) {
+      return 'Amount must be greater than 0';
+    }
+    if (numValue > 10000000) {
+      return 'Amount seems too large. Please check.';
+    }
+    // Check for more than 2 decimal places
+    if (value.includes('.') && value.split('.')[1].length > 2) {
+      return 'Amount can have maximum 2 decimal places';
+    }
+    return undefined;
+  };
+
+  const validateCategory = (value: string): string | undefined => {
+    if (!value || value.trim() === '') {
+      return 'Please select a category';
+    }
+    if (!CATEGORIES.find(cat => cat.id === value)) {
+      return 'Please select a valid category';
+    }
+    return undefined;
+  };
+
+  const validateDescription = (value: string): string | undefined => {
+    if (value.trim().length > 500) {
+      return 'Description must be less than 500 characters';
+    }
+    return undefined;
+  };
+
+  // Handle field changes with validation
+  const handleFieldChange = (field: keyof ValidationErrors, value: string) => {
+    // Update the field value
+    switch (field) {
+      case 'title':
+        setTitle(value);
+        break;
+      case 'amount':
+        setAmount(value);
+        break;
+      case 'category':
+        setCategory(value);
+        break;
+      case 'description':
+        setDescription(value);
+        break;
+    }
+
+    // Mark field as touched
+    setTouched(prev => ({ ...prev, [field]: true }));
+
+    // Validate and update errors
+    let error: string | undefined;
+    switch (field) {
+      case 'title':
+        error = validateTitle(value);
+        break;
+      case 'amount':
+        error = validateAmount(value);
+        break;
+      case 'category':
+        error = validateCategory(value);
+        break;
+      case 'description':
+        error = validateDescription(value);
+        break;
+    }
+
+    setErrors(prev => ({
+      ...prev,
+      [field]: error
+    }));
+  };
+
+  // Validate all fields
+  const validateAllFields = (): boolean => {
+    const titleError = validateTitle(title);
+    const amountError = validateAmount(amount);
+    const categoryError = validateCategory(category);
+    const descriptionError = validateDescription(description);
+
+    const newErrors: ValidationErrors = {};
+    if (titleError) newErrors.title = titleError;
+    if (amountError) newErrors.amount = amountError;
+    if (categoryError) newErrors.category = categoryError;
+    if (descriptionError) newErrors.description = descriptionError;
+
+    setErrors(newErrors);
+    setTouched({ title: true, amount: true, category: true, description: true });
+
+    return Object.keys(newErrors).length === 0;
+  };
 
   const analyzeWithAI = async () => {
     if (!title.trim()) {
@@ -183,13 +309,9 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
   }, [open]);
 
   const handleSave = async () => {
-    if (!title.trim()) {
-      Alert.alert('Missing Title', 'Please enter a title for this transaction');
-      return;
-    }
-    
-    if (!amount.trim() || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount greater than 0');
+    // Validate all fields first
+    if (!validateAllFields()) {
+      Alert.alert('Validation Error', 'Please fix all errors before saving');
       return;
     }
 
@@ -220,6 +342,8 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
       setAiPredictedCategory('');
       setAiConfidence(0);
       setAiAnalyzed(false);
+      setErrors({});
+      setTouched({});
       
       Alert.alert(
         'Success', 
@@ -249,7 +373,16 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
     textSecondary: isDarkTheme ? '#94a3b8' : '#64748b',
     border: isDarkTheme ? '#475569' : '#e2e8f0',
     overlay: isDarkTheme ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.8)',
+    inputBackground: isDarkTheme ? '#475569' : '#ffffff',
+    placeholder: isDarkTheme ? '#64748b' : '#94a3b8',
+    primary: isDarkTheme ? '#60a5fa' : '#3b82f6',
+    success: isDarkTheme ? '#34d399' : '#10b981',
+    error: isDarkTheme ? '#fb7185' : '#ef4444',
+    warning: isDarkTheme ? '#fbbf24' : '#f59e0b',
   });
+
+  // Get theme colors
+  const colors = getThemeColors();
 
   return (
     <Modal
@@ -261,9 +394,9 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
     >
       <StatusBar 
         barStyle={isDarkTheme ? "light-content" : "light-content"} 
-        backgroundColor={getThemeColors().overlay} 
+        backgroundColor={colors.overlay} 
       />
-      <View style={[styles.modalOverlay, { backgroundColor: getThemeColors().overlay }]}>
+      <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
         <SafeAreaView style={styles.safeArea}>
           <KeyboardAvoidingView 
             style={styles.keyboardAvoid}
@@ -273,35 +406,35 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
               style={[
                 styles.modalContainer,
                 { 
-                  backgroundColor: getThemeColors().background,
+                  backgroundColor: colors.background,
                   opacity: fadeAnim,
                   transform: [{ translateY: slideAnim }]
                 }
               ]}
             >
               {/* Professional Header */}
-              <View style={[styles.headerContainer, { backgroundColor: getThemeColors().background }]}>
-                <View style={[styles.headerContent, { borderBottomColor: getThemeColors().border }]}>
+              <View style={[styles.headerContainer, { backgroundColor: colors.background }]}>
+                <View style={[styles.headerContent, { borderBottomColor: colors.border }]}>
                   <TouchableOpacity
-                    style={[styles.backButton, { backgroundColor: getThemeColors().surface }]}
+                    style={[styles.backButton, { backgroundColor: colors.surface }]}
                     onPress={() => onOpenChange(false)}
                   >
-                    <Ionicons name="arrow-back" size={24} color={getThemeColors().text} />
+                    <Ionicons name="arrow-back" size={24} color={colors.text} />
                   </TouchableOpacity>
                   <View style={styles.headerTitleContainer}>
-                    <Text style={[styles.headerTitle, { color: getThemeColors().text }]}>
+                    <Text style={[styles.headerTitle, { color: colors.text }]}>
                       {type === 'income' ? 'Add Income' : 'Add Expense'}
                     </Text>
-                    <Text style={[styles.headerSubtitle, { color: getThemeColors().textSecondary }]}>
+                    <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
                       Track your financial activity
                     </Text>
                   </View>
                   <View style={styles.headerRight}>
-                    <View style={[styles.typeIndicator, { backgroundColor: getThemeColors().surface }]}>
+                    <View style={[styles.typeIndicator, { backgroundColor: colors.surface }]}>
                       <Ionicons 
                         name={type === 'income' ? 'trending-up' : 'trending-down'} 
                         size={16} 
-                        color={type === 'income' ? '#10b981' : '#ef4444'} 
+                        color={type === 'income' ? colors.success : colors.error} 
                       />
                     </View>
                   </View>
@@ -309,47 +442,47 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
               </View>
 
           {/* Professional Tab System */}
-          <View style={[styles.tabContainer, { backgroundColor: getThemeColors().surface }]}>
+          <View style={[styles.tabContainer, { backgroundColor: colors.surface }]}>
             <TouchableOpacity
-              style={[styles.tab, activeTab === 'ai' && [styles.activeTab, { backgroundColor: getThemeColors().background }]]}
+              style={[styles.tab, activeTab === 'ai' && [styles.activeTab, { backgroundColor: colors.background }]]}
               onPress={() => setActiveTab('ai')}
             >
               <View style={styles.tabContent}>
                 <Ionicons 
                   name="sparkles" 
                   size={18} 
-                  color={activeTab === 'ai' ? '#6366f1' : getThemeColors().textSecondary} 
+                  color={activeTab === 'ai' ? colors.primary : colors.textSecondary} 
                 />
                 <Text style={[
                   styles.tabText, 
-                  { color: getThemeColors().textSecondary },
-                  activeTab === 'ai' && styles.activeTabText
+                  { color: colors.textSecondary },
+                  activeTab === 'ai' && [styles.activeTabText, { color: colors.primary }]
                 ]}>
                   AI Assistant
                 </Text>
               </View>
-              {activeTab === 'ai' && <View style={styles.tabIndicator} />}
+              {activeTab === 'ai' && <View style={[styles.tabIndicator, { backgroundColor: colors.primary }]} />}
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={[styles.tab, activeTab === 'manual' && [styles.activeTab, { backgroundColor: getThemeColors().background }]]}
+              style={[styles.tab, activeTab === 'manual' && [styles.activeTab, { backgroundColor: colors.background }]]}
               onPress={() => setActiveTab('manual')}
             >
               <View style={styles.tabContent}>
                 <Ionicons 
                   name="pencil" 
                   size={18} 
-                  color={activeTab === 'manual' ? '#6366f1' : getThemeColors().textSecondary} 
+                  color={activeTab === 'manual' ? colors.primary : colors.textSecondary} 
                 />
                 <Text style={[
                   styles.tabText, 
-                  { color: getThemeColors().textSecondary },
-                  activeTab === 'manual' && styles.activeTabText
+                  { color: colors.textSecondary },
+                  activeTab === 'manual' && [styles.activeTabText, { color: colors.primary }]
                 ]}>
                   Manual Entry
                 </Text>
               </View>
-              {activeTab === 'manual' && <View style={styles.tabIndicator} />}
+              {activeTab === 'manual' && <View style={[styles.tabIndicator, { backgroundColor: colors.primary }]} />}
             </TouchableOpacity>
           </View>
 
@@ -364,22 +497,24 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
               <>
                 {/* Type Selection */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Transaction Type</Text>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Transaction Type</Text>
                   <View style={styles.typeContainer}>
                     <TouchableOpacity
                       style={[
                         styles.typeButton,
-                        type === 'expense' && styles.typeButtonActiveExpense
+                        { borderColor: colors.border, backgroundColor: colors.inputBackground },
+                        type === 'expense' && [styles.typeButtonActiveExpense, { backgroundColor: colors.error, borderColor: colors.error }]
                       ]}
                       onPress={() => setType('expense')}
                     >
                       <Ionicons 
                         name="arrow-down-circle" 
                         size={20} 
-                        color={type === 'expense' ? '#ffffff' : '#ef4444'} 
+                        color={type === 'expense' ? '#ffffff' : colors.error} 
                       />
                       <Text style={[
                         styles.typeButtonText,
+                        { color: colors.textSecondary },
                         type === 'expense' && styles.typeButtonTextActive
                       ]}>
                         Expense
@@ -388,17 +523,19 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
                     <TouchableOpacity
                       style={[
                         styles.typeButton,
-                        type === 'income' && styles.typeButtonActiveIncome
+                        { borderColor: colors.border, backgroundColor: colors.inputBackground },
+                        type === 'income' && [styles.typeButtonActiveIncome, { backgroundColor: colors.success, borderColor: colors.success }]
                       ]}
                       onPress={() => setType('income')}
                     >
                       <Ionicons 
                         name="arrow-up-circle" 
                         size={20} 
-                        color={type === 'income' ? '#ffffff' : '#10b981'} 
+                        color={type === 'income' ? '#ffffff' : colors.success} 
                       />
                       <Text style={[
                         styles.typeButtonText,
+                        { color: colors.textSecondary },
                         type === 'income' && styles.typeButtonTextActive
                       ]}>
                         Income
@@ -409,20 +546,37 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
 
                 {/* AI Description Input */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Describe Your Transaction</Text>
-                  <Text style={styles.sectionSubtitle}>Our AI will analyze and categorize it for you</Text>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Describe Your Transaction</Text>
+                  <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>Our AI will analyze and categorize it for you</Text>
                   <View style={styles.aiInputWrapper}>
                     <TextInput
-                      style={styles.aiInput}
+                      style={[
+                        styles.aiInput,
+                        { 
+                          borderColor: errors.title ? colors.error : colors.border,
+                          backgroundColor: colors.inputBackground,
+                          color: colors.text
+                        }
+                      ]}
                       value={title}
-                      onChangeText={setTitle}
-                      placeholder="e.g., Coffee ₹5"
-                      placeholderTextColor="#94a3b8"
+                      onChangeText={(text) => handleFieldChange('title', text)}
+                      placeholder="e.g., Coffee at Starbucks ₹250"
+                      placeholderTextColor={colors.placeholder}
                       multiline
                       textAlignVertical="top"
                     />
+                    {errors.title && touched.title && (
+                      <View style={styles.errorContainer}>
+                        <Ionicons name="alert-circle" size={16} color={colors.error} />
+                        <Text style={[styles.errorText, { color: colors.error }]}>{errors.title}</Text>
+                      </View>
+                    )}
                     <TouchableOpacity
-                      style={[styles.analyzeButton, aiAnalyzing && styles.analyzeButtonDisabled]}
+                      style={[
+                        styles.analyzeButton, 
+                        { backgroundColor: colors.primary },
+                        (aiAnalyzing || !title.trim()) && [styles.analyzeButtonDisabled, { backgroundColor: colors.textSecondary }]
+                      ]}
                       onPress={analyzeWithAI}
                       disabled={aiAnalyzing || !title.trim()}
                     >
@@ -440,28 +594,28 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
 
                 {/* AI Analysis Result */}
                 {aiAnalyzed && (
-                  <View style={styles.aiResultContainer}>
+                  <View style={[styles.aiResultContainer, { backgroundColor: isDarkTheme ? '#064e3b' : '#f0fdf4', borderColor: isDarkTheme ? '#059669' : '#bbf7d0' }]}>
                     <View style={styles.aiResultHeader}>
-                      <Ionicons name="checkmark-circle" size={20} color="#10b981" />
-                      <Text style={styles.aiResultTitle}>AI Analysis Complete</Text>
+                      <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                      <Text style={[styles.aiResultTitle, { color: colors.success }]}>AI Analysis Complete</Text>
                     </View>
                     <View style={styles.aiResultGrid}>
                       <View style={styles.aiResultItem}>
-                        <Text style={styles.aiResultLabel}>Category</Text>
+                        <Text style={[styles.aiResultLabel, { color: colors.success }]}>Category</Text>
                         <View style={styles.aiResultValueContainer}>
                           <Ionicons 
                             name={getCategoryIcon(aiPredictedCategory) as any} 
                             size={16} 
-                            color="#3b82f6" 
+                            color={colors.primary} 
                           />
-                          <Text style={styles.aiResultValue}>
+                          <Text style={[styles.aiResultValue, { color: colors.success }]}>
                             {aiPredictedCategory}
                           </Text>
                         </View>
                       </View>
                       <View style={styles.aiResultItem}>
-                        <Text style={styles.aiResultLabel}>Confidence</Text>
-                        <Text style={styles.aiResultValue}>
+                        <Text style={[styles.aiResultLabel, { color: colors.success }]}>Confidence</Text>
+                        <Text style={[styles.aiResultValue, { color: colors.success }]}>
                           {(aiConfidence * 100).toFixed(0)}%
                         </Text>
                       </View>
@@ -471,28 +625,40 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
 
                 {/* Amount Input */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Amount</Text>
-                  <View style={styles.amountInputContainer}>
-                    <Text style={styles.currencySymbol}>₹</Text>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Amount</Text>
+                  <View style={[
+                    styles.amountInputContainer,
+                    { 
+                      borderColor: errors.amount ? colors.error : colors.border,
+                      backgroundColor: colors.inputBackground
+                    }
+                  ]}>
+                    <Text style={[styles.currencySymbol, { color: colors.primary }]}>₹</Text>
                     <TextInput
-                      style={styles.amountInput}
+                      style={[styles.amountInput, { color: colors.text }]}
                       value={amount}
-                      onChangeText={setAmount}
+                      onChangeText={(text) => handleFieldChange('amount', text)}
                       placeholder="0.00"
-                      placeholderTextColor="#94a3b8"
+                      placeholderTextColor={colors.placeholder}
                       keyboardType="numeric"
                     />
                   </View>
+                  {errors.amount && touched.amount && (
+                    <View style={styles.errorContainer}>
+                      <Ionicons name="alert-circle" size={16} color={colors.error} />
+                      <Text style={[styles.errorText, { color: colors.error }]}>{errors.amount}</Text>
+                    </View>
+                  )}
                 </View>
 
                 {/* Date Display */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Date & Time</Text>
-                  <View style={styles.dateTimeCard}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Date & Time</Text>
+                  <View style={[styles.dateTimeCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                     <View style={styles.dateTimeContent}>
-                      <Ionicons name="calendar-outline" size={20} color="#3b82f6" />
+                      <Ionicons name="calendar-outline" size={20} color={colors.primary} />
                       <View>
-                        <Text style={styles.dateText}>
+                        <Text style={[styles.dateText, { color: colors.text }]}>
                           {new Date().toLocaleDateString('en-US', { 
                             weekday: 'long', 
                             year: 'numeric', 
@@ -500,7 +666,7 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
                             day: 'numeric' 
                           })}
                         </Text>
-                        <Text style={styles.timeText}>
+                        <Text style={[styles.timeText, { color: colors.textSecondary }]}>
                           {new Date().toLocaleTimeString('en-US', { 
                             hour: '2-digit', 
                             minute: '2-digit' 
@@ -562,22 +728,24 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
               <>
                 {/* Type Selection */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Transaction Type</Text>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Transaction Type</Text>
                   <View style={styles.typeContainer}>
                     <TouchableOpacity
                       style={[
                         styles.typeButton,
-                        type === 'expense' && styles.typeButtonActiveExpense
+                        { borderColor: colors.border, backgroundColor: colors.inputBackground },
+                        type === 'expense' && [styles.typeButtonActiveExpense, { backgroundColor: colors.error, borderColor: colors.error }]
                       ]}
                       onPress={() => setType('expense')}
                     >
                       <Ionicons 
                         name="arrow-down-circle" 
                         size={20} 
-                        color={type === 'expense' ? '#ffffff' : '#ef4444'} 
+                        color={type === 'expense' ? '#ffffff' : colors.error} 
                       />
                       <Text style={[
                         styles.typeButtonText,
+                        { color: colors.textSecondary },
                         type === 'expense' && styles.typeButtonTextActive
                       ]}>
                         Expense
@@ -586,17 +754,19 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
                     <TouchableOpacity
                       style={[
                         styles.typeButton,
-                        type === 'income' && styles.typeButtonActiveIncome
+                        { borderColor: colors.border, backgroundColor: colors.inputBackground },
+                        type === 'income' && [styles.typeButtonActiveIncome, { backgroundColor: colors.success, borderColor: colors.success }]
                       ]}
                       onPress={() => setType('income')}
                     >
                       <Ionicons 
                         name="arrow-up-circle" 
                         size={20} 
-                        color={type === 'income' ? '#ffffff' : '#10b981'} 
+                        color={type === 'income' ? '#ffffff' : colors.success} 
                       />
                       <Text style={[
                         styles.typeButtonText,
+                        { color: colors.textSecondary },
                         type === 'income' && styles.typeButtonTextActive
                       ]}>
                         Income
@@ -607,54 +777,93 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
 
                 {/* Title Input */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Title</Text>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Title</Text>
                   <TextInput
-                    style={styles.textInput}
+                    style={[
+                      styles.textInput,
+                      { 
+                        borderColor: errors.title ? colors.error : colors.border,
+                        backgroundColor: colors.inputBackground,
+                        color: colors.text
+                      }
+                    ]}
                     value={title}
-                    onChangeText={setTitle}
+                    onChangeText={(text) => handleFieldChange('title', text)}
                     placeholder="Enter transaction title"
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor={colors.placeholder}
                   />
+                  {errors.title && touched.title && (
+                    <View style={styles.errorContainer}>
+                      <Ionicons name="alert-circle" size={16} color={colors.error} />
+                      <Text style={[styles.errorText, { color: colors.error }]}>{errors.title}</Text>
+                    </View>
+                  )}
                 </View>
 
                 {/* Amount Input */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Amount</Text>
-                  <View style={styles.amountInputContainer}>
-                    <Text style={styles.currencySymbol}>₹</Text>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Amount</Text>
+                  <View style={[
+                    styles.amountInputContainer,
+                    { 
+                      borderColor: errors.amount ? colors.error : colors.border,
+                      backgroundColor: colors.inputBackground
+                    }
+                  ]}>
+                    <Text style={[styles.currencySymbol, { color: colors.primary }]}>₹</Text>
                     <TextInput
-                      style={styles.amountInput}
+                      style={[styles.amountInput, { color: colors.text }]}
                       value={amount}
-                      onChangeText={setAmount}
+                      onChangeText={(text) => handleFieldChange('amount', text)}
                       placeholder="0.00"
-                      placeholderTextColor="#94a3b8"
+                      placeholderTextColor={colors.placeholder}
                       keyboardType="numeric"
                     />
                   </View>
+                  {errors.amount && touched.amount && (
+                    <View style={styles.errorContainer}>
+                      <Ionicons name="alert-circle" size={16} color={colors.error} />
+                      <Text style={[styles.errorText, { color: colors.error }]}>{errors.amount}</Text>
+                    </View>
+                  )}
                 </View>
 
                 {/* Category Selection */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Category</Text>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Category</Text>
                   <View style={styles.categoryGrid}>
                     {CATEGORIES.map((cat) => (
                       <TouchableOpacity
                         key={cat.id}
                         style={[
                           styles.categoryCard,
-                          category === cat.id && styles.selectedCategoryCard
+                          { 
+                            borderColor: colors.border, 
+                            backgroundColor: colors.inputBackground 
+                          },
+                          category === cat.id && [styles.selectedCategoryCard, { 
+                            backgroundColor: colors.primary, 
+                            borderColor: colors.primary 
+                          }]
                         ]}
-                        onPress={() => setCategory(cat.id)}
+                        onPress={() => {
+                          setCategory(cat.id);
+                          // Clear category error
+                          const newErrors = { ...errors };
+                          delete newErrors.category;
+                          setErrors(newErrors);
+                        }}
                       >
                         <View style={styles.categoryIconContainer}>
                           <Ionicons 
                             name={cat.icon as any} 
                             size={20} 
-                            color={category === cat.id ? '#ffffff' : '#64748b'} 
+                            color={category === cat.id ? '#ffffff' : colors.textSecondary} 
                           />
                         </View>
                         <Text style={[
                           styles.categoryCardText,
+                          { color: colors.textSecondary },
                           category === cat.id && styles.selectedCategoryCardText
                         ]}>
                           {cat.label}
@@ -662,33 +871,54 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
                       </TouchableOpacity>
                     ))}
                   </View>
+                  {errors.category && touched.category && (
+                    <View style={styles.errorContainer}>
+                      <Ionicons name="alert-circle" size={16} color={colors.error} />
+                      <Text style={[styles.errorText, { color: colors.error }]}>{errors.category}</Text>
+                    </View>
+                  )}
                 </View>
 
                 {/* Description Input */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Description</Text>
-                  <Text style={styles.sectionSubtitle}>Add additional notes (optional)</Text>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Description</Text>
+                  <Text style={[styles.sectionSubtitle, { color: colors.textSecondary }]}>
+                    Add additional notes (optional)
+                  </Text>
                   <TextInput
-                    style={styles.textAreaInput}
+                    style={[
+                      styles.textAreaInput,
+                      { 
+                        borderColor: errors.description ? colors.error : colors.border,
+                        backgroundColor: colors.inputBackground,
+                        color: colors.text
+                      }
+                    ]}
                     value={description}
-                    onChangeText={setDescription}
+                    onChangeText={(text) => handleFieldChange('description', text)}
                     placeholder="Add any additional details..."
-                    placeholderTextColor="#94a3b8"
+                    placeholderTextColor={colors.placeholder}
                     multiline
                     numberOfLines={3}
                     textAlignVertical="top"
                   />
+                  {errors.description && touched.description && (
+                    <View style={styles.errorContainer}>
+                      <Ionicons name="alert-circle" size={16} color={colors.error} />
+                      <Text style={[styles.errorText, { color: colors.error }]}>{errors.description}</Text>
+                    </View>
+                  )}
                 </View>
               </>
             )}
           </ScrollView>
 
           {/* Professional Action Footer */}
-          <View style={[styles.footer, { backgroundColor: getThemeColors().background, borderTopColor: getThemeColors().border }]}>
+          <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
             <TouchableOpacity
               style={[
                 styles.saveButton,
-                type === 'income' ? styles.saveButtonIncome : styles.saveButtonExpense
+                type === 'income' ? [styles.saveButtonIncome, { backgroundColor: colors.success }] : [styles.saveButtonExpense, { backgroundColor: colors.error }]
               ]}
               onPress={handleSave}
             >
@@ -1207,6 +1437,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#ffffff',
+  },
+
+  // Error Validation Styles
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingHorizontal: 4,
+    gap: 6,
+  },
+  errorText: {
+    fontSize: 12,
+    fontWeight: '500',
+    flex: 1,
   },
 });
 
