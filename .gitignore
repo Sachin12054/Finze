@@ -41,6 +41,7 @@ yarn-error.*
 # Firebase
 firebase-debug.log
 firestore-debug.log
+Backend/firebase-service-account-template.json
 
 # Python
 __pycache__/
