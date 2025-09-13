@@ -102,4 +102,30 @@ export interface ExtractedDetails {
     price: number;
     quantity?: number;
   }>;
+  // Additional fields from enhanced backend
+  extraction_confidence?: number;
+  processing_time?: string;
+  currency?: string;
+  merchant_address?: string;
+  time?: string;
+  subcategory?: string;
+  payment_method?: string;
+  tax_details?: {
+    amount: number;
+    rate: number;
+  };
+  discounts?: Array<{
+    description: string;
+    amount: number;
+  }>;
+  additional_charges?: Array<{
+    description: string;
+    amount: number;
+  }>;
+  receipt_number?: string;
+  notes?: string;
+  // Database integration fields
+  id?: string;
+  saved_to_database?: boolean;
+  save_error?: string;
 }

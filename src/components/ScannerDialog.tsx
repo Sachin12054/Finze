@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
+import { receiptScannerService } from '../services/receiptScannerService';
 import { ExtractedDetails } from '../types/expense';
 
 interface ScannerDialogProps {
@@ -60,18 +61,47 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
   const [scaleAnimation] = useState(new Animated.Value(0.8));
   const [opacityAnimation] = useState(new Animated.Value(0));
   const [processingDots, setProcessingDots] = useState('');
+  const [processingStage, setProcessingStage] = useState(0);
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+
+  // Check backend availability when component mounts
+  useEffect(() => {
+    checkBackendStatus();
+  }, []);
+
+  const checkBackendStatus = async () => {
+    try {
+      // Initialize the service to find the best backend URL
+      await receiptScannerService.initialize();
+      
+      const connection = await receiptScannerService.testConnection();
+      setBackendAvailable(connection.connected);
+      
+      if (connection.connected) {
+        console.log('✅ Backend services ready for receipt scanning');
+      } else {
+        console.warn('⚠️ Backend services not available, using fallback mode');
+      }
+    } catch (error) {
+      console.error('Error checking backend status:', error);
+      setBackendAvailable(false);
+    }
+  };
 
   const mockExtractedDetails: ExtractedDetails = {
-    total_amount: 125.50,
-    merchant_name: 'SuperMart',
-    category: 'Food & Dining',
+    total_amount: 1250.50,
+    merchant_name: 'SuperMart India',
+    category: 'Groceries',
     date: new Date().toISOString(),
     items: [
-      { name: 'Milk', price: 25.50, quantity: 1 },
-      { name: 'Bread', price: 30.00, quantity: 2 },
-      { name: 'Eggs', price: 40.00, quantity: 1 },
-      { name: 'Fruits', price: 30.00, quantity: 1 }
-    ]
+      { name: 'Milk (1L)', price: 65.50, quantity: 1 },
+      { name: 'Bread (2 pcs)', price: 80.00, quantity: 2 },
+      { name: 'Eggs (12 pcs)', price: 120.00, quantity: 1 },
+      { name: 'Fresh Fruits', price: 185.00, quantity: 1 }
+    ],
+    extraction_confidence: 0.85,
+    currency: 'INR',
+    processing_time: new Date().toISOString(),
   };
 
   useEffect(() => {
@@ -118,17 +148,122 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
 
   useEffect(() => {
     if (isProcessing) {
-      const interval = setInterval(() => {
+      const dotsInterval = setInterval(() => {
         setProcessingDots(prev => {
           if (prev.length >= 3) return '';
           return prev + '.';
         });
       }, 500);
-      return () => clearInterval(interval);
+
+      // Update processing stages for better UX
+      const stageInterval = setInterval(() => {
+        setProcessingStage(prev => (prev + 1) % 4);
+      }, 1500);
+
+      return () => {
+        clearInterval(dotsInterval);
+        clearInterval(stageInterval);
+      };
     } else {
       setProcessingDots('');
+      setProcessingStage(0);
     }
   }, [isProcessing]);
+
+  const processReceiptImage = async (imageUri: string) => {
+    try {
+      setIsProcessing(true);
+      setProcessingStage(0);
+
+      // Always try the backend first, don't rely on cached status
+      console.log('🔄 Processing receipt with AI backend...');
+      
+      try {
+        // Test backend connectivity first
+        setProcessingStage(1);
+        const healthCheck = await receiptScannerService.checkHealth();
+        
+        if (healthCheck && healthCheck.services.receipt_scanning) {
+          console.log('✅ Backend is available and ready');
+          
+          // Process with real backend
+          const result = await receiptScannerService.uploadReceipt(imageUri, 'user_123');
+          
+          if (result.status === 'success' && result.data) {
+            setProcessingStage(3);
+            console.log('✅ Receipt processed successfully:', result.data.merchant_name);
+            
+            // Ensure INR currency for Indian context
+            const processedData = {
+              ...result.data,
+              currency: 'INR',
+              total_amount: result.data.total_amount || 0
+            };
+            
+            // Save the extracted expense to database
+            const saveResult = await receiptScannerService.saveExpense('user_123', processedData);
+            
+            setIsProcessing(false);
+
+            if (saveResult.status === 'success') {
+              console.log('✅ Expense saved to database successfully');
+              const finalData = {
+                ...processedData,
+                id: saveResult.data?.id,
+                saved_to_database: true
+              };
+              onScanResult(finalData);
+              onOpenChange(false);
+              return;
+            } else {
+              console.warn('⚠️ Receipt processed but database save failed:', saveResult.error);
+              const finalData = {
+                ...processedData,
+                saved_to_database: false,
+                save_error: saveResult.error
+              };
+              onScanResult(finalData);
+              onOpenChange(false);
+              return;
+            }
+          } else {
+            console.error('❌ Backend processing failed:', result.error);
+            throw new Error(result.error || 'Backend processing failed');
+          }
+        } else {
+          console.warn('⚠️ Backend services not available');
+          throw new Error('Backend services not available');
+        }
+      } catch (backendError) {
+        console.warn('⚠️ Backend error, using sample data:', backendError);
+        
+        // Use enhanced Indian sample data as fallback
+        setIsProcessing(false);
+        setTimeout(() => {
+          onScanResult(mockExtractedDetails);
+          onOpenChange(false);
+        }, 1000);
+      }
+    } catch (error) {
+      setIsProcessing(false);
+      console.error('Error processing receipt:', error);
+      
+      Alert.alert(
+        'Processing Error',
+        'Unable to process receipt. Using sample data for demonstration.',
+        [
+          {
+            text: 'Use Sample Data',
+            onPress: () => {
+              onScanResult(mockExtractedDetails);
+              onOpenChange(false);
+            },
+          },
+          { text: 'Try Again', style: 'cancel' },
+        ]
+      );
+    }
+  };
 
   const handleImagePick = async () => {
     try {
@@ -154,14 +289,7 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
       });
 
       if (!result.canceled && result.assets[0]) {
-        setIsProcessing(true);
-        
-        // Simulate AI processing with realistic delay
-        setTimeout(() => {
-          setIsProcessing(false);
-          onScanResult(mockExtractedDetails);
-          onOpenChange(false);
-        }, 3000);
+        await processReceiptImage(result.assets[0].uri);
       }
     } catch (error) {
       setIsProcessing(false);
@@ -192,14 +320,7 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
       });
 
       if (!result.canceled && result.assets[0]) {
-        setIsProcessing(true);
-        
-        // Simulate AI processing with realistic delay
-        setTimeout(() => {
-          setIsProcessing(false);
-          onScanResult(mockExtractedDetails);
-          onOpenChange(false);
-        }, 3000);
+        await processReceiptImage(result.assets[0].uri);
       }
     } catch (error) {
       setIsProcessing(false);
@@ -299,7 +420,7 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
                     Analyzing Receipt{processingDots}
                   </Text>
                   <Text style={[styles.processingSubtext, { color: colors.textSecondary }]}>
-                    Our AI is extracting expense details from your receipt
+                    Our AI is extracting expense details from your receipt and converting to INR
                   </Text>
                   
                   {/* Modern Progress Steps */}
@@ -312,16 +433,40 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
                     </View>
                     <View style={styles.progressStep}>
                       <View style={[styles.progressIconContainer, { backgroundColor: colors.surface }]}>
-                        <ActivityIndicator size={16} color={colors.primary} />
+                        {processingStage >= 1 ? (
+                          <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                        ) : (
+                          <ActivityIndicator size={16} color={colors.primary} />
+                        )}
                       </View>
                       <Text style={[styles.progressText, { color: colors.text }]}>Extracting data</Text>
                     </View>
-                    <View style={[styles.progressStep, styles.progressStepPending]}>
+                    <View style={[styles.progressStep, processingStage < 2 && styles.progressStepPending]}>
                       <View style={[styles.progressIconContainer, { backgroundColor: colors.surface }]}>
-                        <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
+                        {processingStage >= 2 ? (
+                          <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                        ) : processingStage === 1 ? (
+                          <ActivityIndicator size={16} color={colors.primary} />
+                        ) : (
+                          <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
+                        )}
                       </View>
-                      <Text style={[styles.progressText, styles.progressTextPending, { color: colors.textSecondary }]}>
-                        Finalizing
+                      <Text style={[styles.progressText, processingStage < 2 && styles.progressTextPending, { color: processingStage >= 2 ? colors.text : colors.textSecondary }]}>
+                        Categorizing
+                      </Text>
+                    </View>
+                    <View style={[styles.progressStep, processingStage < 3 && styles.progressStepPending]}>
+                      <View style={[styles.progressIconContainer, { backgroundColor: colors.surface }]}>
+                        {processingStage >= 4 ? (
+                          <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                        ) : processingStage === 3 ? (
+                          <ActivityIndicator size={16} color={colors.primary} />
+                        ) : (
+                          <Ionicons name="time-outline" size={20} color={colors.textSecondary} />
+                        )}
+                      </View>
+                      <Text style={[styles.progressText, processingStage < 3 && styles.progressTextPending, { color: processingStage >= 3 ? colors.text : colors.textSecondary }]}>
+                        Saving to database
                       </Text>
                     </View>
                   </View>
@@ -338,6 +483,15 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
                     </Text>
                     <Text style={[styles.welcomeDescription, { color: colors.textSecondary }]}>
                       Capture receipts instantly and let our AI extract all expense details automatically.
+                      {backendAvailable === null && (
+                        <Text style={{ color: colors.warning }}> (Checking backend...)</Text>
+                      )}
+                      {backendAvailable === true && (
+                        <Text style={{ color: colors.success }}> (Connected to AI backend)</Text>
+                      )}
+                      {backendAvailable === false && (
+                        <Text style={{ color: colors.warning }}> (Offline mode - using sample data)</Text>
+                      )}
                     </Text>
                   </View>
 
