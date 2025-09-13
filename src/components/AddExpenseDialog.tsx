@@ -217,7 +217,7 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
     setAiAnalyzing(true);
     try {
       // Call AI categorization API - use network IP instead of localhost for mobile/emulator access
-      const response = await fetch('http://10.12.71.153:8001/api/categorize', {
+      const response = await fetch('http://10.12.70.202:8001/api/categorize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
