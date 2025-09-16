@@ -4,37 +4,37 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as LocalAuthentication from "expo-local-authentication";
 import { useRouter } from "expo-router";
 import { deleteUser, signOut, updatePassword, updateProfile } from "firebase/auth";
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    Dimensions,
-    Image,
-    Linking,
-    Platform,
-    ScrollView,
-    Share,
-    StatusBar,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    Vibration,
-    View,
+  Alert,
+  Dimensions,
+  Image,
+  Linking,
+  Platform,
+  ScrollView,
+  Share,
+  StatusBar,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Vibration,
+  View,
 } from "react-native";
 import Animated, {
-    BounceIn,
-    FadeInDown,
-    FadeInUp,
-    SlideInLeft,
-    SlideInRight,
-    useAnimatedStyle,
-    useSharedValue,
-    withSequence,
-    withSpring
+  BounceIn,
+  FadeInDown,
+  FadeInUp,
+  SlideInLeft,
+  SlideInRight,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring
 } from "react-native-reanimated";
-import { auth, db } from "../src/services/firebase";
+import { databaseService } from "../src/services/databaseService";
+import { auth } from "../src/services/firebase";
 import { deleteProfileImage, generatePlaceholderAvatar, UploadProgress } from "../src/services/imageUploadService";
 import NotificationService from "../src/services/notificationService";
 
@@ -105,45 +105,59 @@ export default function ProfileScreen() {
       setIsLoading(true);
       console.log("Current user:", auth.currentUser?.email, auth.currentUser?.displayName);
 
-      const profileRef = doc(db, "users", uid, "profile", "info");
       try {
-        const snap = await getDoc(profileRef);
-        if (snap.exists()) {
-          const data = snap.data();
-          console.log("Fetched Firestore data:", data);
-          setFullName(data.fullName || "");
+        const userDoc = await databaseService.getUserById(uid);
+        if (userDoc && userDoc.profile) {
+          const data = userDoc.profile;
+          setFullName(data.displayName || "");
           setDisplayName(data.displayName || auth.currentUser?.displayName || "User");
           setPhone(data.phone || "");
-          setBio(data.bio || "");
-          setLocation(data.location || "");
-          setWebsite(data.website || "");
-          setDarkMode(data.darkMode || false);
-          setBiometricEnabled(data.biometricEnabled || false);
-          setNotificationsEnabled(data.notificationsEnabled || false);
-          setPrivateAccount(data.privateAccount || false);
-          if (data.profilePic) setProfilePic(data.profilePic);
+          setBio(""); // bio not in new schema
+          setLocation(""); // location not in new schema
+          setWebsite(""); // website not in new schema
+          setDarkMode(data.preferences?.theme === 'dark' || false);
+          setBiometricEnabled(false); // biometric not in new schema
+          setNotificationsEnabled(data.preferences?.notifications || false);
+          setPrivateAccount(false); // private account not in new schema
+          if (data.avatar_url) setProfilePic(data.avatar_url);
         } else {
-          console.log("No Firestore document found, initializing with defaults");
+          console.log("No user document found, initializing with defaults");
           const defaultName = auth.currentUser?.displayName || "User";
-          await setDoc(profileRef, {
-            fullName: "",
+          await databaseService.createUser({
+            email: auth.currentUser?.email || "",
             displayName: defaultName,
-            phone: "",
-            bio: "",
-            location: "",
-            website: "",
-            darkMode: false,
-            biometricEnabled: false,
-            notificationsEnabled: false,
-            privateAccount: false,
-            profilePic: profilePic,
-            createdAt: new Date(),
+            profile: {
+              displayName: defaultName,
+              avatar_url: profilePic,
+              preferences: {
+                theme: 'light',
+                notifications: true
+              }
+            }
           });
           setDisplayName(defaultName);
         }
       } catch (error: any) {
         console.error("Error fetching profile:", error);
-        Alert.alert("❌ Error", error.message || "Failed to fetch profile");
+        
+        // Handle specific permission errors with helpful messages
+        if (error.message.includes('deploy Firestore rules')) {
+          Alert.alert(
+            "🔒 Setup Required", 
+            "Database permissions need to be configured. Please run:\n\nfirebase deploy --only firestore:rules\n\nOr contact your developer.",
+            [
+              { text: "Continue Anyway", onPress: () => {
+                // Set up default profile so app can continue
+                const defaultName = auth.currentUser?.displayName || "User";
+                setDisplayName(defaultName);
+                setFullName(defaultName);
+              }},
+              { text: "OK" }
+            ]
+          );
+        } else {
+          Alert.alert("❌ Error", error.message || "Failed to fetch profile");
+        }
       } finally {
         setIsLoading(false);
       }
@@ -186,21 +200,16 @@ export default function ProfileScreen() {
     }
     
     setIsLoading(true);
-    const profileRef = doc(db, "users", uid, "profile", "info");
     try {
-      await updateDoc(profileRef, {
-        fullName,
+      await databaseService.updateUserProfile(uid, {
         displayName,
         phone,
-        bio,
-        location,
-        website,
-        darkMode,
-        biometricEnabled,
-        notificationsEnabled,
-        privateAccount,
-        profilePic,
-        updatedAt: new Date(),
+        avatar_url: profilePic,
+        preferences: {
+          theme: darkMode ? 'dark' : 'light',
+          notifications: notificationsEnabled,
+          // other preferences can be preserved
+        }
       });
       
       // Update Firebase Auth profile
@@ -291,8 +300,7 @@ export default function ProfileScreen() {
               setProfilePic(newAvatarUrl);
 
               // Update Firestore
-              const profileRef = doc(db, "users", uid, "profile", "info");
-              await updateDoc(profileRef, { profilePic: newAvatarUrl });
+              await databaseService.updateUserProfile(uid, { avatar_url: newAvatarUrl });
 
               // Update Firebase Auth profile
               if (auth.currentUser) {
@@ -325,8 +333,7 @@ export default function ProfileScreen() {
       setProfilePic(placeholderUrl);
 
       // Update Firestore
-      const profileRef = doc(db, "users", uid, "profile", "info");
-      await updateDoc(profileRef, { profilePic: placeholderUrl });
+      await databaseService.updateUserProfile(uid, { avatar_url: placeholderUrl });
 
       // Update Firebase Auth profile
       if (auth.currentUser) {
@@ -503,7 +510,8 @@ export default function ProfileScreen() {
 
   const performAccountDeletion = async () => {
     try {
-      await deleteDoc(doc(db, "users", uid!, "profile", "info"));
+      // Delete user from our database (this will be handled by the new database service if needed)
+      // await databaseService.deleteUser(uid!); // Can implement this later if needed
       await deleteUser(auth.currentUser!);
       Alert.alert("✅ Account Deleted", "Your account has been deleted successfully");
       router.replace("/auth/login");

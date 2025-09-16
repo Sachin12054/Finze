@@ -6,16 +6,20 @@ import {
   Alert,
   Animated,
   Dimensions,
+  LayoutAnimation,
   Modal,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
+import { EnhancedFirebaseService } from '../services/enhancedFirebaseService';
+import { auth } from '../services/firebase';
 import { receiptScannerService } from '../services/receiptScannerService';
 import { ExtractedDetails } from '../types/expense';
 
@@ -34,6 +38,84 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
 }) => {
   // Theme context
   const { isDarkTheme } = useTheme();
+  
+  // State management
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [scannedData, setScannedData] = useState<ExtractedDetails | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(height));
+
+  // Category mapping for expense classification
+  const categoryMapping = {
+    'food': 'Food & Dining',
+    'dining': 'Food & Dining',
+    'groceries': 'Food & Dining',
+    'restaurant': 'Food & Dining',
+    'kfc': 'Food & Dining',
+    'mcdonald': 'Food & Dining',
+    'mcdonalds': 'Food & Dining',
+    'burger': 'Food & Dining',
+    'pizza': 'Food & Dining',
+    'fast food': 'Food & Dining',
+    'fastfood': 'Food & Dining',
+    'cafe': 'Food & Dining',
+    'coffee': 'Food & Dining',
+    'starbucks': 'Food & Dining',
+    'dominos': 'Food & Dining',
+    'subway': 'Food & Dining',
+    'transport': 'Transportation',
+    'transportation': 'Transportation',
+    'fuel': 'Transportation',
+    'taxi': 'Transportation',
+    'shopping': 'Shopping',
+    'retail': 'Shopping',
+    'clothing': 'Shopping',
+    'entertainment': 'Entertainment',
+    'movie': 'Entertainment',
+    'games': 'Entertainment',
+    'technology': 'Technology',
+    'electronics': 'Technology',
+    'software': 'Technology',
+    'bills': 'Bills & Utilities',
+    'utilities': 'Bills & Utilities',
+    'electricity': 'Bills & Utilities',
+    'healthcare': 'Healthcare',
+    'medical': 'Healthcare',
+    'pharmacy': 'Healthcare',
+    'travel': 'Travel',
+    'hotel': 'Travel',
+    'flight': 'Travel',
+    'education': 'Education',
+    'books': 'Education',
+    'course': 'Education',
+    'business': 'Business',
+    'office': 'Business',
+    'salary': 'Income',
+    'income': 'Income',
+    'other': 'Other'
+  };
+
+  // Function to map extracted category to app category
+  const mapCategory = (extractedCategory: string, merchantName: string = ''): string => {
+    const lowerCategory = extractedCategory.toLowerCase();
+    const lowerMerchant = merchantName.toLowerCase();
+    
+    // First try to map by category
+    let mappedCategory = categoryMapping[lowerCategory as keyof typeof categoryMapping];
+    
+    // If not found, try to map by merchant name
+    if (!mappedCategory || mappedCategory === 'Other') {
+      for (const [key, value] of Object.entries(categoryMapping)) {
+        if (lowerMerchant.includes(key) || lowerCategory.includes(key)) {
+          mappedCategory = value;
+          break;
+        }
+      }
+    }
+    
+    return mappedCategory || 'Other';
+  };
   
   // Theme-aware colors
   const getThemeColors = () => ({
@@ -56,10 +138,32 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
   // Get theme colors
   const colors = getThemeColors();
   
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [extractedData, setExtractedData] = useState<ExtractedDetails | null>(null);
+  const [editableData, setEditableData] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [transactionType, setTransactionType] = useState<'expense' | 'income'>('expense');
+
+  // Safe helper functions for handling potentially undefined values
+  const safeToString = (value: any): string => {
+    if (value === null || value === undefined) {
+      return '0';
+    }
+    return String(value);
+  };
+
+  const safeParseFloat = (value: any): number => {
+    if (value === null || value === undefined) {
+      return 0;
+    }
+    const parsed = parseFloat(String(value));
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
   const [slideAnimation] = useState(new Animated.Value(0));
   const [scaleAnimation] = useState(new Animated.Value(0.8));
   const [opacityAnimation] = useState(new Animated.Value(0));
+  const [previewAnimation] = useState(new Animated.Value(0));
   const [processingDots, setProcessingDots] = useState('');
   const [processingStage, setProcessingStage] = useState(0);
   const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
@@ -176,7 +280,6 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
       setProcessingStage(0);
 
       // Always try the backend first, don't rely on cached status
-      console.log('🔄 Processing receipt with AI backend...');
       
       try {
         // Test backend connectivity first
@@ -184,89 +287,264 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
         const healthCheck = await receiptScannerService.checkHealth();
         
         if (healthCheck && healthCheck.services.receipt_scanning) {
-          console.log('✅ Backend is available and ready');
+          // Check if user is authenticated
+          if (!auth.currentUser) {
+            throw new Error('User not authenticated');
+          }
           
-          // Process with real backend
-          const result = await receiptScannerService.uploadReceipt(imageUri, 'user_123');
+          // Process with real backend using actual user ID
+          const result = await receiptScannerService.uploadReceipt(imageUri, auth.currentUser.uid);
           
           if (result.status === 'success' && result.data) {
             setProcessingStage(3);
-            console.log('✅ Receipt processed successfully:', result.data.merchant_name);
             
             // Ensure INR currency for Indian context
             const processedData = {
               ...result.data,
               currency: 'INR',
-              total_amount: result.data.total_amount || 0
+              total_amount: result.data.total_amount || 0,
+              mapped_category: mapCategory(result.data.category || 'other', result.data.merchant_name || '')
             };
             
-            // Save the extracted expense to database
-            const saveResult = await receiptScannerService.saveExpense('user_123', processedData);
-            
             setIsProcessing(false);
-
-            if (saveResult.status === 'success') {
-              console.log('✅ Expense saved to database successfully');
-              const finalData = {
-                ...processedData,
-                id: saveResult.data?.id,
-                saved_to_database: true
-              };
-              onScanResult(finalData);
-              onOpenChange(false);
-              return;
-            } else {
-              console.warn('⚠️ Receipt processed but database save failed:', saveResult.error);
-              const finalData = {
-                ...processedData,
-                saved_to_database: false,
-                save_error: saveResult.error
-              };
-              onScanResult(finalData);
-              onOpenChange(false);
-              return;
-            }
+            setExtractedData(processedData);
+            setEditableData({
+              total_amount: processedData.total_amount,
+              subtotal_amount: (processedData as any).subtotal_amount,
+              merchant_name: processedData.merchant_name,
+              category: processedData.mapped_category,
+              items: processedData.items || [],
+              date: processedData.date,
+              gst: (processedData as any).gst || (processedData as any).tax_amount,
+              subtotal: (processedData as any).subtotal,
+              tax_details: (processedData as any).tax_details
+            });
+            setShowPreview(true);
+            // Animate preview entrance
+            Animated.sequence([
+              Animated.timing(previewAnimation, {
+                toValue: 1,
+                duration: 400,
+                useNativeDriver: true,
+              }),
+            ]).start();
+            return;
           } else {
-            console.error('❌ Backend processing failed:', result.error);
             throw new Error(result.error || 'Backend processing failed');
           }
         } else {
-          console.warn('⚠️ Backend services not available');
           throw new Error('Backend services not available');
         }
       } catch (backendError) {
-        console.warn('⚠️ Backend error, using sample data:', backendError);
-        
         // Use enhanced Indian sample data as fallback
+        const enhancedMockData = {
+          ...mockExtractedDetails,
+          mapped_category: mapCategory(mockExtractedDetails.category || 'other', mockExtractedDetails.merchant_name || '')
+        };
+        
         setIsProcessing(false);
-        setTimeout(() => {
-          onScanResult(mockExtractedDetails);
-          onOpenChange(false);
-        }, 1000);
+        setExtractedData(enhancedMockData);
+        setEditableData({
+          total_amount: enhancedMockData.total_amount,
+          subtotal_amount: (enhancedMockData as any).subtotal_amount,
+          merchant_name: enhancedMockData.merchant_name,
+          category: enhancedMockData.mapped_category,
+          items: enhancedMockData.items || [],
+          date: enhancedMockData.date,
+          gst: (enhancedMockData as any).gst || (enhancedMockData as any).tax_amount,
+          subtotal: (enhancedMockData as any).subtotal,
+          tax_details: (enhancedMockData as any).tax_details
+        });
+        setShowPreview(true);
+        // Animate preview entrance
+        Animated.sequence([
+          Animated.timing(previewAnimation, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]).start();
       }
     } catch (error) {
       setIsProcessing(false);
-      console.error('Error processing receipt:', error);
-      
       Alert.alert(
         'Processing Error',
-        'Unable to process receipt. Using sample data for demonstration.',
+        'Unable to process receipt. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const handleSaveToDatabase = async () => {
+    if (!editableData) return;
+    
+    try {
+      setIsSaving(true);
+      
+      // Check authentication first
+      if (!auth.currentUser) {
+        Alert.alert(
+          'Authentication Required',
+          'Please log in to save expenses.',
+          [{ text: 'OK' }]
+        );
+        setIsSaving(false);
+        return;
+      }
+      
+      // Create transaction object for Enhanced Firebase Service
+      const transactionData = {
+        title: `Receipt from ${editableData.merchant_name}`,
+        amount: safeParseFloat(editableData.total_amount),
+        category: editableData.category,
+        type: transactionType,
+        source: 'OCR' as const,
+        description: `Items: ${editableData.items.map((item: any) => item.name).join(', ')}`,
+        date: editableData.date || new Date().toISOString(),
+        paymentMethod: 'Cash', // Default, can be made editable
+        location: editableData.merchant_name || '',
+        receipt: extractedData?.processing_time || '',
+        tags: ['receipt', 'scanned']
+      };
+
+      // Save using Enhanced Firebase Service
+      const transactionId = await EnhancedFirebaseService.addTransaction(transactionData);
+
+      // Calculate GST and subtotal using the same logic as preview
+      const calculatedAmounts = calculateTotalWithGST();
+      
+      // Also save to scanner collection for detailed history
+      const scannerData = {
+        merchantName: editableData.merchant_name || 'Unknown Merchant',
+        totalAmount: safeParseFloat(editableData.total_amount),
+        category: editableData.category || 'Other',
+        extractedCategory: extractedData?.category || 'other',
+        date: editableData.date || new Date().toISOString(),
+        currency: 'INR',
+        items: editableData.items || [],
+        extractionConfidence: 0.8, // Default confidence
+        processingTime: new Date().toISOString(),
+        gstAmount: calculatedAmounts.gst,
+        subtotalAmount: calculatedAmounts.subtotal,
+        extractedText: `Receipt from ${editableData.merchant_name}`,
+        transactionId: transactionId
+      };      await EnhancedFirebaseService.addScannerExpense(scannerData);
+      
+      setIsSaving(false);
+      
+      Alert.alert(
+        '✅ Success!',
+        `${transactionType === 'income' ? 'Income' : 'Expense'} of ₹${editableData.total_amount} has been added to your transaction history.`,
         [
           {
-            text: 'Use Sample Data',
+            text: 'OK',
             onPress: () => {
-              onScanResult(mockExtractedDetails);
-              onOpenChange(false);
-            },
-          },
-          { text: 'Try Again', style: 'cancel' },
+              onScanResult({
+                ...extractedData!,
+                id: transactionId,
+                saved_to_database: true
+              });
+              handleClosePreview();
+            }
+          }
+        ]
+      );
+      
+    } catch (error: any) {
+      setIsSaving(false);
+      Alert.alert(
+        'Save Error',
+        `Failed to save expense: ${error.message}. Would you like to try again?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Retry', onPress: handleSaveToDatabase }
         ]
       );
     }
   };
 
+  const handleClosePreview = () => {
+    setShowPreview(false);
+    setExtractedData(null);
+    setEditableData(null);
+    onOpenChange(false);
+  };
+
+  const handleTransactionTypeChange = (type: 'expense' | 'income') => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTransactionType(type);
+  };
+
+  const calculateTotalWithGST = () => {
+    if (!editableData) {
+      return { subtotal: 0, gst: 0, total: 0 };
+    }
+    
+    // First priority: Use extracted values from backend if available
+    const extractedSubtotal = safeParseFloat(editableData.subtotal_amount || editableData.subtotal);
+    const extractedGST = safeParseFloat(editableData.tax_details?.tax_amount || editableData.gst);
+    const extractedTotal = safeParseFloat(editableData.total_amount);
+    
+    // If we have all extracted values, use them directly
+    if (extractedSubtotal > 0 && extractedGST > 0 && extractedTotal > 0) {
+      return {
+        subtotal: extractedSubtotal,
+        gst: extractedGST,
+        total: extractedTotal
+      };
+    }
+    
+    // Second priority: Calculate from items if available
+    let itemsSubtotal = 0;
+    if (editableData.items && Array.isArray(editableData.items)) {
+      itemsSubtotal = editableData.items.reduce((sum: number, item: any) => {
+        const itemPrice = safeParseFloat(item.price || item.total_price || item.unit_price || item.amount || 0);
+        const itemQuantity = parseInt(item.quantity || '1') || 1;
+        return sum + (itemPrice * itemQuantity);
+      }, 0);
+    }
+    
+    // Use calculated items subtotal if extracted subtotal is not available
+    const finalSubtotal = extractedSubtotal > 0 ? extractedSubtotal : itemsSubtotal;
+    
+    // Calculate GST based on available data
+    let finalGST = 0;
+    let finalTotal = 0;
+    
+    if (extractedGST > 0) {
+      // Use extracted GST
+      finalGST = extractedGST;
+      finalTotal = finalSubtotal + finalGST;
+    } else if (extractedTotal > 0 && finalSubtotal > 0) {
+      // Calculate GST as difference between total and subtotal
+      finalGST = extractedTotal - finalSubtotal;
+      finalTotal = extractedTotal;
+    } else if (finalSubtotal > 0) {
+      // Calculate 18% GST if no other data available
+      const taxRate = safeParseFloat(editableData.tax_details?.tax_rate) || 18;
+      finalGST = (finalSubtotal * taxRate) / 100;
+      finalTotal = finalSubtotal + finalGST;
+    }
+    
+    return {
+      subtotal: Math.max(0, finalSubtotal),
+      gst: Math.max(0, finalGST),
+      total: Math.max(0, finalTotal)
+    };
+  };
+
   const handleImagePick = async () => {
     try {
+      // Check authentication first
+      if (!auth.currentUser) {
+        Alert.alert(
+          'Authentication Required',
+          'Please log in to use the receipt scanner.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (permissionResult.granted === false) {
@@ -284,7 +562,7 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        aspect: [4, 3],
+        // No fixed aspect ratio - allows free cropping for any receipt size
         quality: 0.8,
       });
 
@@ -299,6 +577,16 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
 
   const handleCameraPick = async () => {
     try {
+      // Check authentication first
+      if (!auth.currentUser) {
+        Alert.alert(
+          'Authentication Required',
+          'Please log in to use the receipt scanner.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       
       if (permissionResult.granted === false) {
@@ -315,7 +603,7 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
 
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
-        aspect: [4, 3],
+        // No fixed aspect ratio - allows free cropping for any receipt size
         quality: 0.8,
       });
 
@@ -339,64 +627,50 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
       visible={open}
       transparent={true}
       animationType="none"
-      onRequestClose={handleClose}
-      statusBarTranslucent
-    >
-      <StatusBar barStyle="light-content" backgroundColor={colors.overlay} />
-      <Animated.View 
-        style={[
-          styles.overlay,
-          {
-            backgroundColor: colors.overlay,
-            opacity: opacityAnimation,
-          }
-        ]}
-      >
-        <SafeAreaView style={styles.safeArea}>
-          <Animated.View
-            style={[
-              styles.container,
-              {
-                backgroundColor: colors.background,
-                transform: [
-                  {
-                    translateY: slideAnimation.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [height * 0.8, 0],
-                    }),
-                  },
-                  { scale: scaleAnimation },
-                ],
-                opacity: opacityAnimation,
-              },
-            ]}
-          >
-            {/* Modern Header */}
-            <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-              <View style={styles.headerTopRow}>
-                <TouchableOpacity
-                  style={[styles.backButton, { backgroundColor: colors.surface }]}
-                  onPress={handleClose}
-                  disabled={isProcessing}
-                >
-                  <Ionicons 
-                    name="arrow-back" 
-                    size={24} 
-                    color={isProcessing ? colors.textSecondary : colors.text} 
-                  />
-                </TouchableOpacity>
-                <View style={styles.headerTitleContainer}>
-                  <Text style={[styles.headerTitle, { color: colors.text }]}>Receipt Scanner</Text>
-                  <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>AI-powered expense extraction</Text>
-                </View>
-                <View style={styles.headerRight}>
-                  <View style={[styles.aiIndicator, { backgroundColor: colors.primarySurface }]}>
-                    <Ionicons name="sparkles" size={16} color={colors.primary} />
-                    <Text style={[styles.aiText, { color: colors.primary }]}>AI</Text>
-                  </View>
+    onRequestClose={handleClose}
+    statusBarTranslucent
+  >
+    <Animated.View style={[styles.overlay, { opacity: opacityAnimation }]}>
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+        <Animated.View
+          style={[
+            styles.container,
+            { backgroundColor: colors.background },
+            {
+              transform: [
+                { translateY: slideAnimation.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }) },
+                { scale: scaleAnimation }
+              ]
+            }
+          ]}
+        >
+          {/* Modern Header */}
+          <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+            <View style={styles.headerTopRow}>
+              <TouchableOpacity
+                style={[styles.backButton, { backgroundColor: colors.surface }]}
+                onPress={handleClose}
+                disabled={isProcessing}
+              >
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+              <View style={styles.headerTitleContainer}>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>
+                  Receipt Scanner
+                </Text>
+                <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+                  AI-powered expense extraction
+                </Text>
+              </View>
+              <View style={styles.headerRight}>
+                <View style={[styles.aiIndicator, { backgroundColor: colors.primarySurface }]}>
+                  <Ionicons name="sparkles" size={14} color={colors.primary} />
+                  <Text style={[styles.aiText, { color: colors.primary }]}>AI</Text>
                 </View>
               </View>
             </View>
+          </View>
 
             {/* Professional Content */}
             <ScrollView 
@@ -471,6 +745,167 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
                     </View>
                   </View>
                 </View>
+              ) : showPreview && editableData ? (
+                <>
+                  {/* Receipt Preview Section */}
+                  <Animated.ScrollView 
+                    showsVerticalScrollIndicator={false}
+                    style={{
+                      transform: [{
+                        scale: previewAnimation.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.9, 1],
+                        })
+                      }],
+                      opacity: previewAnimation
+                    }}
+                  >
+                    <View style={styles.previewContainer}>
+                      <View style={[styles.previewHeader, { backgroundColor: colors.successSurface }]}>
+                        <Ionicons name="checkmark-circle" size={32} color={colors.success} />
+                        <Text style={[styles.previewTitle, { color: colors.text }]}>Receipt Processed!</Text>
+                        <Text style={[styles.previewSubtitle, { color: colors.textSecondary }]}>
+                          Please review the extracted details below
+                        </Text>
+                      </View>
+
+                      {/* Merchant & Total */}
+                      <View style={[styles.previewCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                        <Text style={[styles.cardTitle, { color: colors.text }]}>Transaction Details</Text>
+                        <View style={styles.detailRow}>
+                          <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Merchant:</Text>
+                          <TextInput
+                            style={[styles.detailInput, { color: colors.text, backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+                            value={editableData.merchant_name}
+                            onChangeText={(text) => setEditableData({...editableData, merchant_name: text})}
+                            placeholder="Enter merchant name"
+                            placeholderTextColor={colors.placeholder}
+                          />
+                        </View>
+                        
+                        {/* Transaction Type Toggle */}
+                        <View style={styles.detailRow}>
+                          <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Type:</Text>
+                          <View style={styles.transactionTypeContainer}>
+                            <TouchableOpacity
+                              style={[
+                                styles.typeButton,
+                                { backgroundColor: transactionType === 'expense' ? colors.error : colors.surface },
+                                { borderColor: transactionType === 'expense' ? colors.error : colors.border }
+                              ]}
+                              onPress={() => handleTransactionTypeChange('expense')}
+                            >
+                              <Ionicons 
+                                name="trending-down" 
+                                size={20} 
+                                color={transactionType === 'expense' ? '#ffffff' : colors.error} 
+                              />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[
+                                styles.typeButton,
+                                { backgroundColor: transactionType === 'income' ? colors.success : colors.surface },
+                                { borderColor: transactionType === 'income' ? colors.success : colors.border }
+                              ]}
+                              onPress={() => handleTransactionTypeChange('income')}
+                            >
+                              <Ionicons 
+                                name="trending-up" 
+                                size={20} 
+                                color={transactionType === 'income' ? '#ffffff' : colors.success} 
+                              />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        
+                        <View style={styles.detailRow}>
+                          <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Category:</Text>
+                          <Text style={[styles.detailValue, { color: colors.text, backgroundColor: colors.primarySurface, borderColor: colors.border }]}>
+                            {editableData.category}
+                          </Text>
+                        </View>
+                        <View style={styles.detailRow}>
+                          <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Total Amount:</Text>
+                          <Text style={[
+                            styles.totalAmount, 
+                            { color: transactionType === 'income' ? colors.success : colors.error }
+                          ]}>
+                            {transactionType === 'income' ? '+' : '-'}₹{safeParseFloat(editableData.total_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Items Breakdown */}
+                      {editableData.items && editableData.items.length > 0 && (
+                        <View style={[styles.previewCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                          <Text style={[styles.cardTitle, { color: colors.text }]}>Items Breakdown</Text>
+                          {editableData.items.map((item: any, index: number) => (
+                            <View key={index} style={styles.itemRow}>
+                              <View style={styles.itemDetails}>
+                                <Text style={[styles.itemName, { color: colors.text }]}>{item.name}</Text>
+                                <Text style={[styles.itemQuantity, { color: colors.textSecondary }]}>
+                                  Qty: {item.quantity || 1}
+                                </Text>
+                              </View>
+                              <Text style={[styles.itemPrice, { color: colors.text }]}>
+                                ₹{safeParseFloat(item.price).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                              </Text>
+                            </View>
+                          ))}
+                          
+                          {/* GST Calculation */}
+                          <View style={[styles.gstContainer, { borderTopColor: colors.border }]}>
+                            <View style={styles.gstRow}>
+                              <Text style={[styles.gstLabel, { color: colors.textSecondary }]}>Subtotal:</Text>
+                              <Text style={[styles.gstValue, { color: colors.text }]}>
+                                ₹{calculateTotalWithGST().subtotal.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                              </Text>
+                            </View>
+                            <View style={styles.gstRow}>
+                              <Text style={[styles.gstLabel, { color: colors.textSecondary }]}>GST (18%):</Text>
+                              <Text style={[styles.gstValue, { color: colors.text }]}>
+                                ₹{calculateTotalWithGST().gst.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                              </Text>
+                            </View>
+                            <View style={[styles.gstRow, styles.totalRow]}>
+                              <Text style={[styles.gstLabel, styles.totalLabel, { color: colors.text }]}>Total:</Text>
+                              <Text style={[styles.gstValue, styles.totalValue, { color: colors.primary }]}>
+                                ₹{editableData.total_amount.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      )}
+
+                      {/* Action Buttons */}
+                      <View style={styles.previewActions}>
+                        <TouchableOpacity
+                          style={[styles.saveButton, { backgroundColor: colors.primary }]}
+                          onPress={handleSaveToDatabase}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? (
+                            <ActivityIndicator size="small" color="#ffffff" />
+                          ) : (
+                            <Ionicons name="checkmark" size={24} color="#ffffff" />
+                          )}
+                          <Text style={styles.saveButtonText}>
+                            {isSaving ? 'Saving...' : 'Add to Expenses'}
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity
+                          style={[styles.editButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                          onPress={handleClosePreview}
+                          disabled={isSaving}
+                        >
+                          <Ionicons name="pencil" size={20} color={colors.text} />
+                          <Text style={[styles.editButtonText, { color: colors.text }]}>Cancel</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </Animated.ScrollView>
+                </>
               ) : (
                 <>
                   {/* Welcome Section */}
@@ -944,6 +1379,186 @@ const styles = StyleSheet.create({
     color: '#64748b',
     flex: 1,
     lineHeight: 18,
+  },
+
+  // Preview Styles
+  previewContainer: {
+    padding: 20,
+  },
+  previewHeader: {
+    alignItems: 'center',
+    padding: 24,
+    borderRadius: 16,
+    marginBottom: 20,
+  },
+  previewTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  previewSubtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  previewCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  detailLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    width: 120,
+  },
+  detailInput: {
+    flex: 1,
+    fontSize: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  detailValue: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    padding: 12,
+    borderRadius: 8,
+    marginLeft: 12,
+    textAlign: 'center',
+    borderWidth: 1,
+  },
+  totalAmount: {
+    fontSize: 20,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'right',
+  },
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  itemDetails: {
+    flex: 1,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  itemQuantity: {
+    fontSize: 14,
+  },
+  itemPrice: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  gstContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+  },
+  gstRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  totalRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+  },
+  gstLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  totalLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  gstValue: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  previewActions: {
+    gap: 12,
+    marginTop: 24,
+  },
+  saveButton: {
+    backgroundColor: '#3b82f6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+  },
+  saveButtonText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  editButton: {
+    backgroundColor: '#ffffff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    gap: 8,
+  },
+  editButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  
+  // Transaction Type Toggle Styles
+  transactionTypeContainer: {
+    flexDirection: 'row',
+    marginLeft: 12,
+    gap: 12,
+    alignItems: 'center',
+  },
+  typeButton: {
+    width: 44,
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  typeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

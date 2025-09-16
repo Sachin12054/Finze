@@ -1,13 +1,13 @@
 import {
-    createUserWithEmailAndPassword,
-    onAuthStateChanged,
-    sendPasswordResetEmail,
-    signInWithEmailAndPassword,
-    signOut,
-    updateProfile,
-    User
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile,
+  User
 } from 'firebase/auth';
-import { EnhancedFirebaseService } from './enhancedFirebaseService';
+import { createUser, updateUserProfile } from './databaseService';
 import { auth } from './firebase';
 
 export interface AuthUser {
@@ -23,8 +23,7 @@ export class AuthService {
   static async signUp(
     email: string, 
     password: string, 
-    displayName: string,
-    role: string = 'customer'
+    displayName: string
   ): Promise<AuthUser> {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -33,17 +32,20 @@ export class AuthService {
       // Update user profile
       await updateProfile(user, { displayName });
 
-      // Create user profile in Firebase
-      await EnhancedFirebaseService.createUserProfile({
-        displayName,
-        email,
-        bio: '',
-        phoneNumber: '',
-        location: '',
-        totalBalance: 0,
-        monthlyIncome: 0,
-        monthlyExpenses: 0,
-        role, // Add role to user profile
+      // Create user profile in new database structure
+      await createUser({
+        email: email,
+        displayName: displayName,
+        profile: {
+          currency: 'INR',
+          preferences: {
+            notifications: true,
+            theme: 'auto',
+            language: 'en',
+            auto_categorize: true,
+            budget_alerts: true
+          }
+        }
       });
 
       return {
@@ -138,9 +140,11 @@ export class AuthService {
       await updateProfile(user, updates);
 
       // Also update in our database
-      await EnhancedFirebaseService.updateUserProfile({
-        displayName: updates.displayName,
-      });
+      if (user.uid && updates.displayName) {
+        await updateUserProfile(user.uid, {
+          preferences: {} // Keep existing preferences
+        });
+      }
     } catch (error) {
       throw new Error('Failed to update profile');
     }

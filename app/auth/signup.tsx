@@ -3,20 +3,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    KeyboardAvoidingView,
+    Platform,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import AuthService from "../../src/services/authService";
 
@@ -153,7 +153,7 @@ export default function Signup() {
     setLoading(true);
     try {
       // Use AuthService for signup with customer role as default
-      await AuthService.signUp(email.trim(), password, name.trim(), "customer");
+      await AuthService.signUp(email.trim(), password, name.trim());
       
       // Success animation
       Animated.timing(buttonScale, {

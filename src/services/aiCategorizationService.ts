@@ -3,7 +3,13 @@
  * Advanced ML-powered expense categorization and financial insights
  */
 
-import { EnhancedFirebaseService } from './enhancedFirebaseService';
+import { ExpenseWithType, SetGoal } from '../types/database';
+import {
+    getAllExpenses,
+    getBudgets,
+    getCurrentUserId,
+    getSetGoals
+} from './databaseService';
 
 export interface CategorySuggestion {
   category: string;
@@ -396,26 +402,29 @@ class AICategorization {
   static async generateSmartSuggestions(): Promise<SmartSuggestion[]> {
     try {
       const suggestions: SmartSuggestion[] = [];
+      const userId = getCurrentUserId();
       
       // Get recent transactions and budgets
       const endDate = new Date();
       const startDate = new Date();
       startDate.setMonth(startDate.getMonth() - 1);
       
-      const transactions = await EnhancedFirebaseService.getTransactionsByDateRange(
-        startDate.toISOString(),
-        endDate.toISOString()
-      );
+      const expenses = await getAllExpenses(userId);
       
-      const budgets = await EnhancedFirebaseService.getAllBudgets();
+      // Get budgets using callback (convert to promise for this function)
+      const budgets = await new Promise<any[]>((resolve) => {
+        getBudgets(userId, (budgetData) => {
+          resolve(budgetData);
+        });
+      });
 
       // Budget alerts
       for (const budget of budgets) {
-        const categorySpending = transactions
-          .filter(t => t.category === budget.category && t.type === 'expense')
-          .reduce((sum, t) => sum + t.amount, 0);
+        const categorySpending = expenses
+          .filter(expense => expense.category === budget.category)
+          .reduce((sum, expense) => sum + expense.amount, 0);
         
-        const percentageUsed = (categorySpending / budget.amount) * 100;
+        const percentageUsed = (categorySpending / (budget.budget_amount || budget.amount || 1)) * 100;
         
         if (percentageUsed > 80) {
           suggestions.push({
@@ -432,14 +441,12 @@ class AICategorization {
       // Spending pattern analysis
       const categorySpending: { [key: string]: number[] } = {};
       
-      // Group transactions by category
-      transactions.forEach(transaction => {
-        if (transaction.type === 'expense') {
-          if (!categorySpending[transaction.category]) {
-            categorySpending[transaction.category] = [];
-          }
-          categorySpending[transaction.category].push(transaction.amount);
+      // Group expenses by category
+      expenses.forEach((expense: ExpenseWithType) => {
+        if (!categorySpending[expense.category || 'Other']) {
+          categorySpending[expense.category || 'Other'] = [];
         }
+        categorySpending[expense.category || 'Other'].push(expense.amount);
       });
 
       // Find categories with high spending
@@ -462,17 +469,17 @@ class AICategorization {
       }
 
       // Saving opportunities
-      const totalMonthlyExpenses = transactions
-        .filter(t => t.type === 'expense')
-        .reduce((sum, t) => sum + t.amount, 0);
+      const totalMonthlyExpenses = expenses
+        .reduce((sum: number, expense: ExpenseWithType) => sum + expense.amount, 0);
       
       if (totalMonthlyExpenses > 0) {
-        const subscriptionExpenses = transactions
-          .filter(t => 
-            t.category === 'Bills & Utilities' || 
-            (t.description && t.description.toLowerCase().includes('subscription'))
+        const subscriptionExpenses = expenses
+          .filter((expense: ExpenseWithType) => 
+            expense.category === 'Bills & Utilities' || 
+            ((expense.title || expense.raw_description || '') && 
+             (expense.title || expense.raw_description || '').toLowerCase().includes('subscription'))
           )
-          .reduce((sum, t) => sum + t.amount, 0);
+          .reduce((sum: number, expense: ExpenseWithType) => sum + expense.amount, 0);
         
         if (subscriptionExpenses > totalMonthlyExpenses * 0.15) {
           suggestions.push({
@@ -487,10 +494,14 @@ class AICategorization {
       }
 
       // Goal recommendations
-      const goals = await EnhancedFirebaseService.getAllSavingsGoals();
-      const hasEmergencyGoal = goals.some(goal => 
-        goal.name.toLowerCase().includes('emergency') || 
-        goal.name.toLowerCase().includes('fund')
+      const goals = await new Promise<SetGoal[]>((resolve) => {
+        getSetGoals(userId, (goalsData) => {
+          resolve(goalsData);
+        });
+      });
+      const hasEmergencyGoal = goals.some((goal: SetGoal) => 
+        goal.goal_name.toLowerCase().includes('emergency') || 
+        goal.goal_name.toLowerCase().includes('fund')
       );
       
       if (!hasEmergencyGoal && totalMonthlyExpenses > 0) {
@@ -520,29 +531,31 @@ class AICategorization {
   static async generateSpendingInsights(): Promise<SpendingInsight[]> {
     try {
       const insights: SpendingInsight[] = [];
+      const userId = getCurrentUserId();
       
       // Get last 3 months of data
       const endDate = new Date();
       const startDate = new Date();
       startDate.setMonth(startDate.getMonth() - 3);
       
-      const transactions = await EnhancedFirebaseService.getTransactionsByDateRange(
-        startDate.toISOString(),
-        endDate.toISOString()
-      );
+      // Get all expenses and filter by date
+      const expenses = await getAllExpenses(userId);
+      const filteredExpenses = expenses.filter((expense: ExpenseWithType) => {
+        const expenseDate = new Date(expense.date);
+        return expenseDate >= startDate && expenseDate <= endDate;
+      });
 
       // Group by month and category
       const monthlyData: { [month: string]: { [category: string]: number } } = {};
       
-      transactions.forEach(transaction => {
-        if (transaction.type === 'expense') {
-          const month = transaction.date.substring(0, 7); // YYYY-MM
-          if (!monthlyData[month]) monthlyData[month] = {};
-          if (!monthlyData[month][transaction.category]) {
-            monthlyData[month][transaction.category] = 0;
-          }
-          monthlyData[month][transaction.category] += transaction.amount;
+      filteredExpenses.forEach((expense: ExpenseWithType) => {
+        const month = expense.date.substring(0, 7); // YYYY-MM
+        if (!monthlyData[month]) monthlyData[month] = {};
+        const category = expense.category || 'Other';
+        if (!monthlyData[month][category]) {
+          monthlyData[month][category] = 0;
         }
+        monthlyData[month][category] += expense.amount;
       });
 
       // Analyze trends for each category

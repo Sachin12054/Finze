@@ -1,21 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  Modal,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Animated,
+    Dimensions,
+    Modal,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { LegacyExpense } from "../services/legacyAdapterService";
 
@@ -74,6 +72,38 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   });
 
   const colors = getThemeColors();
+
+  // Helper functions to handle NaN/undefined values
+  const formatCurrency = (amount: number | undefined | null) => {
+    if (amount === undefined || amount === null || isNaN(amount) || typeof amount !== 'number') {
+      return '₹0.00';
+    }
+    return `₹${amount.toFixed(2)}`;
+  };
+
+  const safeToFixed = (value: number | undefined | null, decimals: number = 2): string => {
+    if (value === undefined || value === null || isNaN(value) || typeof value !== 'number') {
+      if (decimals === 0) return '0';
+      return '0.' + '0'.repeat(decimals);
+    }
+    return value.toFixed(decimals);
+  };
+
+  // Safe helper functions for handling potentially undefined values
+  const safeToString = (value: any): string => {
+    if (value === null || value === undefined) {
+      return '0';
+    }
+    return String(value);
+  };
+
+  const safeParseFloat = (value: any): number => {
+    if (value === null || value === undefined) {
+      return 0;
+    }
+    const parsed = parseFloat(String(value));
+    return isNaN(parsed) ? 0 : parsed;
+  };
 
   // Animation values
   const [slideAnimation] = useState(new Animated.Value(0));
@@ -166,7 +196,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
         break;
       case 'amount':
-        comparison = a.amount - b.amount;
+        const amountA = typeof a.amount === 'number' ? a.amount : 0;
+        const amountB = typeof b.amount === 'number' ? b.amount : 0;
+        comparison = amountA - amountB;
         break;
       case 'category':
         comparison = (a.category || '').localeCompare(b.category || '');
@@ -195,7 +227,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         expense.date,
         expense.title || 'Untitled',
         expense.category || 'Uncategorized',
-        expense.amount.toString(),
+        safeToString(expense.amount),
         expense.type,
         expense.source || 'Manual'
       ]);
@@ -204,16 +236,18 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         .map(row => row.map(field => `"${field}"`).join(','))
         .join('\n');
       
-      const fileName = `transactions_${new Date().toISOString().split('T')[0]}.csv`;
-      const filePath = `${FileSystem.documentDirectory}${fileName}`;
+      // TODO: Fix FileSystem.documentDirectory API issue
+      console.log('Export CSV feature temporarily disabled');
+      Alert.alert('Info', 'Export feature is temporarily disabled due to API changes');
+      // const fileName = `transactions_${new Date().toISOString().split('T')[0]}.csv`;
+      // const filePath = FileSystem.documentDirectory + fileName;
+      // await FileSystem.writeAsStringAsync(filePath, csvContent);
+      // await Sharing.shareAsync(filePath, {
+      //   mimeType: 'text/csv',
+      //   dialogTitle: 'Export Transactions'
+      // });
       
-      await FileSystem.writeAsStringAsync(filePath, csvContent);
-      await Sharing.shareAsync(filePath, {
-        mimeType: 'text/csv',
-        dialogTitle: 'Export Transactions'
-      });
-      
-      Alert.alert('Success', 'Transactions exported successfully!');
+      // Alert.alert('Success', 'Transactions exported successfully!');
     } catch (error) {
       console.error('Export CSV error:', error);
       Alert.alert('Error', 'Failed to export CSV');
@@ -225,9 +259,9 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       let pdfContent = `TRANSACTION HISTORY REPORT\n`;
       pdfContent += `Generated on: ${new Date().toLocaleDateString()}\n\n`;
       pdfContent += `SUMMARY:\n`;
-      pdfContent += `Total Income: ₹${totalIncome.toFixed(2)}\n`;
-      pdfContent += `Total Expenses: ₹${totalExpenses.toFixed(2)}\n`;
-      pdfContent += `Net Amount: ₹${netBalance.toFixed(2)}\n\n`;
+      pdfContent += `Total Income: ₹${safeToFixed(totalIncome, 2)}\n`;
+      pdfContent += `Total Expenses: ₹${safeToFixed(totalExpenses, 2)}\n`;
+      pdfContent += `Net Amount: ₹${safeToFixed(netBalance, 2)}\n\n`;
       pdfContent += `TRANSACTIONS (${filteredExpenses.length} total):\n`;
       pdfContent += `${'='.repeat(50)}\n`;
       
@@ -235,21 +269,23 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         pdfContent += `Date: ${expense.date}\n`;
         pdfContent += `Title: ${expense.title || 'Untitled'}\n`;
         pdfContent += `Category: ${expense.category || 'Uncategorized'}\n`;
-        pdfContent += `Amount: ₹${expense.amount.toFixed(2)} (${expense.type})\n`;
+        pdfContent += `Amount: ₹${safeToFixed(expense.amount, 2)} (${expense.type})\n`;
         pdfContent += `Source: ${expense.source || 'Manual'}\n`;
         pdfContent += `${'-'.repeat(30)}\n`;
       });
       
-      const fileName = `transactions_report_${new Date().toISOString().split('T')[0]}.txt`;
-      const filePath = `${FileSystem.documentDirectory}${fileName}`;
+      // TODO: Fix FileSystem.documentDirectory API issue
+      console.log('Export PDF feature temporarily disabled');
+      Alert.alert('Info', 'Export feature is temporarily disabled due to API changes');
+      // const fileName = `transactions_report_${new Date().toISOString().split('T')[0]}.txt`;
+      // const filePath = `${FileSystem.documentDirectory ?? ''}${fileName}`;
+      // await FileSystem.writeAsStringAsync(filePath, pdfContent);
+      // await Sharing.shareAsync(filePath, {
+      //   mimeType: 'text/plain',
+      //   dialogTitle: 'Export Transaction Report'
+      // });
       
-      await FileSystem.writeAsStringAsync(filePath, pdfContent);
-      await Sharing.shareAsync(filePath, {
-        mimeType: 'text/plain',
-        dialogTitle: 'Export Transaction Report'
-      });
-      
-      Alert.alert('Success', 'Transaction report exported successfully!');
+      // Alert.alert('Success', 'Transaction report exported successfully!');
     } catch (error) {
       console.error('Export PDF error:', error);
       Alert.alert('Error', 'Failed to export report');
@@ -258,7 +294,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
   const handleEditSubmit = () => {
     if (!editExpense || !editExpense.id) return;
-    const parsedAmount = parseFloat(editExpense.amount.toString());
+    const parsedAmount = safeParseFloat(editExpense.amount);
     if (!editExpense.title || isNaN(parsedAmount) || parsedAmount <= 0 || !editExpense.category) return;
     onEditExpense(editExpense.id, {
       title: editExpense.title,
@@ -361,7 +397,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     color={netBalance >= 0 ? colors.success : colors.error} 
                   />
                   <Text style={[styles.balanceText, { color: netBalance >= 0 ? colors.success : colors.error }]}>
-                    ₹{Math.abs(netBalance).toFixed(0)}
+                    ₹{safeToFixed(Math.abs(netBalance), 0)}
                   </Text>
                 </View>
               </View>
@@ -382,7 +418,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                       <Ionicons name="trending-up" size={18} color={colors.success} />
                     </View>
                     <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Income</Text>
-                    <Text style={[styles.summaryValue, { color: colors.success }]}>₹{totalIncome.toFixed(2)}</Text>
+                    <Text style={[styles.summaryValue, { color: colors.success }]}>{formatCurrency(totalIncome)}</Text>
                   </View>
                   
                   <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
@@ -392,7 +428,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                       <Ionicons name="trending-down" size={18} color={colors.error} />
                     </View>
                     <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Expenses</Text>
-                    <Text style={[styles.summaryValue, { color: colors.error }]}>₹{totalExpenses.toFixed(2)}</Text>
+                    <Text style={[styles.summaryValue, { color: colors.error }]}>{formatCurrency(totalExpenses)}</Text>
                   </View>
                   
                   <View style={[styles.summaryDivider, { backgroundColor: colors.border }]} />
@@ -403,7 +439,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     </View>
                     <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Balance</Text>
                     <Text style={[styles.summaryValue, { color: netBalance >= 0 ? colors.success : colors.error }]}>
-                      ₹{netBalance.toFixed(2)}
+                      {formatCurrency(netBalance)}
                     </Text>
                   </View>
                 </View>
@@ -578,57 +614,56 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                 </View>
               )}
 
-              {/* Sort and Export Row */}
-              <View style={styles.actionsRow}>
-                <View style={styles.sortSection}>
-                  <Text style={[styles.sortLabel, { color: colors.textSecondary }]}>Sort by:</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.sortButtonsContainer}>
-                      {(['date', 'amount', 'category'] as const).map((field) => (
-                        <TouchableOpacity
-                          key={field}
-                          style={[
-                            styles.sortButton,
-                            { 
-                              backgroundColor: sortBy === field ? colors.primary : colors.surface,
-                              borderColor: colors.border
-                            }
-                          ]}
-                          onPress={() => toggleSort(field)}
-                        >
-                          <Text style={[styles.sortButtonText, { color: sortBy === field ? '#ffffff' : colors.text }]}>
-                            {field.charAt(0).toUpperCase() + field.slice(1)}
-                          </Text>
-                          {sortBy === field && (
-                            <Ionicons 
-                              name={sortOrder === 'desc' ? "chevron-down" : "chevron-up"} 
-                              size={12} 
-                              color="#ffffff" 
-                              style={styles.sortButtonIcon}
-                            />
-                          )}
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </ScrollView>
-                </View>
+              {/* Sort Controls */}
+              <View style={styles.sortSection}>
+                <Text style={[styles.sortLabel, { color: colors.textSecondary }]}>Sort by:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.sortButtonsContainer}>
+                    {(['date', 'amount', 'category'] as const).map((field) => (
+                      <TouchableOpacity
+                        key={field}
+                        style={[
+                          styles.sortButton,
+                          { 
+                            backgroundColor: sortBy === field ? colors.primary : colors.surface,
+                            borderColor: colors.border
+                          }
+                        ]}
+                        onPress={() => toggleSort(field)}
+                      >
+                        <Text style={[styles.sortButtonText, { color: sortBy === field ? '#ffffff' : colors.text }]}>
+                          {field.charAt(0).toUpperCase() + field.slice(1)}
+                        </Text>
+                        {sortBy === field && (
+                          <Ionicons 
+                            name={sortOrder === 'desc' ? "chevron-down" : "chevron-up"} 
+                            size={12} 
+                            color="#ffffff" 
+                            style={styles.sortButtonIcon}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
 
-                <View style={styles.exportSection}>
-                  <TouchableOpacity 
-                    style={[styles.exportButton, { backgroundColor: colors.success }]} 
-                    onPress={exportToCSV}
-                  >
-                    <Ionicons name="document-text" size={14} color="#ffffff" />
-                    <Text style={styles.exportButtonText}>CSV</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.exportButton, { backgroundColor: colors.primary }]} 
-                    onPress={exportToPDF}
-                  >
-                    <Ionicons name="document" size={14} color="#ffffff" />
-                    <Text style={styles.exportButtonText}>Report</Text>
-                  </TouchableOpacity>
-                </View>
+              {/* Export Controls */}
+              <View style={styles.exportSection}>
+                <TouchableOpacity 
+                  style={[styles.exportButton, { backgroundColor: colors.success }]} 
+                  onPress={exportToCSV}
+                >
+                  <Ionicons name="document-text" size={14} color="#ffffff" />
+                  <Text style={styles.exportButtonText}>CSV</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.exportButton, { backgroundColor: colors.primary }]} 
+                  onPress={exportToPDF}
+                >
+                  <Ionicons name="document" size={14} color="#ffffff" />
+                  <Text style={styles.exportButtonText}>Report</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Transaction List */}
@@ -694,7 +729,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                             styles.transactionAmount,
                             { color: expense.type === 'income' ? colors.success : colors.error }
                           ]}>
-                            {expense.type === 'income' ? '+' : '-'}₹{expense.amount.toFixed(2)}
+                            {expense.type === 'income' ? '+' : '-'}{formatCurrency(expense.amount)}
                           </Text>
                           <TouchableOpacity
                             style={[styles.deleteButton, { backgroundColor: colors.surface }]}
@@ -751,7 +786,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                     style={[styles.editInput, { backgroundColor: colors.surface, color: colors.text, borderColor: colors.border }]}
                     placeholder="0.00"
                     placeholderTextColor={colors.placeholder}
-                    value={editExpense.amount.toString()}
+                    value={safeToString(editExpense.amount)}
                     onChangeText={(text) => setEditExpense({...editExpense, amount: parseFloat(text) || 0})}
                     keyboardType="numeric"
                   />
@@ -1094,16 +1129,9 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
   },
 
-  // Actions Row
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-    gap: 16,
-  },
+  // Sort Section (now standalone)
   sortSection: {
-    flex: 1,
+    marginBottom: 16,
   },
   sortLabel: {
     fontSize: 12,
@@ -1133,16 +1161,20 @@ const styles = StyleSheet.create({
   sortButtonIcon: {
     marginLeft: 2,
   },
+  
+  // Export Section (now standalone below sort)
   exportSection: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
+    marginBottom: 20,
+    justifyContent: 'center',
   },
   exportButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 16,
     backgroundColor: '#10b981',
     gap: 4,
   },

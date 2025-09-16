@@ -1,23 +1,31 @@
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDocs,
-    onSnapshot,
-    orderBy,
-    query,
-    updateDoc,
-    where
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc
 } from 'firebase/firestore';
 import {
-    Budget,
-    Expense,
-    Reminder,
-    SmartSuggestion,
-    TransactionHistory,
-    User
-} from '../types/expense';
+  AICategorizedExpense,
+  AIInsight,
+  Budget,
+  COLLECTIONS,
+  ExpenseWithType,
+  getCollectionPath,
+  ManualExpense,
+  QueryOptions,
+  Recurrence,
+  ScannerExpense,
+  SetGoal,
+  TransactionHistory,
+  UserDocument,
+  UserProfile
+} from '../types/database';
 import { auth, db } from './firebase';
 
 // Helper function to generate UUID
@@ -29,267 +37,535 @@ const generateId = () => {
   });
 };
 
-// Users Collection Operations
-export const createUser = async (userData: Omit<User, 'user_id' | 'created_at' | 'balance'>) => {
-  const user: User = {
-    user_id: generateId(),
+// Helper function to ensure user is authenticated
+const ensureAuth = () => {
+  if (!auth.currentUser) {
+    throw new Error('User not authenticated');
+  }
+  return auth.currentUser.uid;
+};
+
+// ===== USER OPERATIONS =====
+
+export const createUser = async (userData: Omit<UserDocument, 'uid' | 'created_at' | 'updated_at'>): Promise<UserDocument> => {
+  const uid = ensureAuth();
+  
+  const user: UserDocument = {
+    uid,
     ...userData,
+    profile: {
+      currency: 'INR',
+      preferences: {
+        notifications: true,
+        theme: 'auto',
+        language: 'en',
+        auto_categorize: true,
+        budget_alerts: true
+      },
+      ...userData.profile
+    },
     created_at: new Date().toISOString(),
-    balance: 0,
+    updated_at: new Date().toISOString()
   };
   
-  await addDoc(collection(db, 'users'), user);
+  await setDoc(doc(db, COLLECTIONS.USERS, uid), user);
   return user;
 };
 
-export const getUserById = async (userId: string): Promise<User | null> => {
-  const q = query(collection(db, 'users'), where('user_id', '==', userId));
-  const snapshot = await getDocs(q);
-  
-  if (snapshot.empty) return null;
-  
-  return snapshot.docs[0].data() as User;
-};
-
-export const updateUserBalance = async (userId: string, newBalance: number) => {
-  const q = query(collection(db, 'users'), where('user_id', '==', userId));
-  const snapshot = await getDocs(q);
-  
-  if (!snapshot.empty) {
-    const userDoc = snapshot.docs[0];
-    await updateDoc(userDoc.ref, { balance: newBalance });
+export const getUserById = async (userId: string): Promise<UserDocument | null> => {
+  try {
+    const userDoc = await getDoc(doc(db, COLLECTIONS.USERS, userId));
+    
+    if (userDoc.exists()) {
+      const data = userDoc.data() as UserDocument;
+      return data;
+    }
+    return null;
+  } catch (error: any) {
+    console.error('getUserById: Firebase error details:', {
+      code: error.code,
+      message: error.message,
+      userId: userId,
+      collectionPath: COLLECTIONS.USERS,
+      fullPath: `${COLLECTIONS.USERS}/${userId}`
+    });
+    
+    // Handle specific permission error with helpful message
+    if (error.code === 'permission-denied') {
+      throw new Error(`Profile access denied. Please deploy Firestore rules: firebase deploy --only firestore:rules`);
+    }
+    
+    throw new Error(`Error fetching profile: ${error.message}`);
   }
 };
 
-// Expenses Collection Operations
-export const addExpense = async (expenseData: Omit<Expense, 'expense_id' | 'user_id'>) => {
-  if (!auth.currentUser) throw new Error('No authenticated user');
+export const updateUserProfile = async (userId: string, profileData: Partial<UserProfile>): Promise<void> => {
+  await updateDoc(doc(db, COLLECTIONS.USERS, userId), {
+    profile: profileData,
+    updated_at: new Date().toISOString()
+  });
+};
+
+// ===== EXPENSE OPERATIONS =====
+
+// Manual Expenses
+export const addManualExpense = async (expenseData: Omit<ManualExpense, 'expenseId' | 'created_at' | 'updated_at'>): Promise<ManualExpense> => {
+  const userId = ensureAuth();
+  const expenseId = generateId();
   
-  const expense: Expense = {
-    expense_id: generateId(),
-    user_id: auth.currentUser.uid,
+  const expense: ManualExpense = {
+    expenseId,
     ...expenseData,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   };
   
-  await addDoc(collection(db, 'expenses'), expense);
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.EXPENSES.MANUAL);
+  await setDoc(doc(db, collectionPath, expenseId), expense);
   
-  // Update user balance
-  const currentUser = await getUserById(auth.currentUser.uid);
-  if (currentUser) {
-    const newBalance = currentUser.balance - expense.amount;
-    await updateUserBalance(auth.currentUser.uid, newBalance);
-  }
+  // Add to transaction history
+  await addTransactionHistory({
+    source: 'manual',
+    reference_id: expenseId,
+    amount: expense.amount,
+    date: expense.date,
+    type: 'expense',
+    category: expense.category,
+    description: expense.title
+  });
   
   return expense;
 };
 
-export const getExpensesByUser = (userId: string, callback: (expenses: (Expense & { firebaseId: string })[]) => void) => {
-  const q = query(
-    collection(db, 'expenses'), 
-    where('user_id', '==', userId),
-    orderBy('date', 'desc')
-  );
+export const getManualExpenses = (userId: string, callback: (expenses: ManualExpense[]) => void) => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.EXPENSES.MANUAL);
+  const q = query(collection(db, collectionPath), orderBy('date', 'desc'));
   
   return onSnapshot(q, (snapshot) => {
-    const expenses = snapshot.docs.map(doc => ({
-      ...(doc.data() as Expense),
-      firebaseId: doc.id // Keep Firebase doc ID for updates/deletes
-    }));
+    const expenses = snapshot.docs.map(doc => doc.data() as ManualExpense);
     callback(expenses);
   });
 };
 
-export const updateExpense = async (firebaseId: string, updates: Partial<Expense>) => {
-  const expenseRef = doc(db, 'expenses', firebaseId);
-  await updateDoc(expenseRef, updates);
+export const updateManualExpense = async (userId: string, expenseId: string, updates: Partial<ManualExpense>): Promise<void> => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.EXPENSES.MANUAL);
+  await updateDoc(doc(db, collectionPath, expenseId), {
+    ...updates,
+    updated_at: new Date().toISOString()
+  });
 };
 
-export const deleteExpense = async (firebaseId: string) => {
-  const expenseRef = doc(db, 'expenses', firebaseId);
-  await deleteDoc(expenseRef);
+export const deleteManualExpense = async (userId: string, expenseId: string): Promise<void> => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.EXPENSES.MANUAL);
+  await deleteDoc(doc(db, collectionPath, expenseId));
 };
 
-// Budgets Collection Operations
-export const addBudget = async (budgetData: Omit<Budget, 'budget_id' | 'user_id' | 'spent'>) => {
-  if (!auth.currentUser) throw new Error('No authenticated user');
+// AI Categorized Expenses
+export const addAICategorizedExpense = async (expenseData: Omit<AICategorizedExpense, 'expenseId' | 'created_at' | 'updated_at'>): Promise<AICategorizedExpense> => {
+  const userId = ensureAuth();
+  const expenseId = generateId();
   
-  const budget: Budget = {
-    budget_id: generateId(),
-    user_id: auth.currentUser.uid,
-    spent: 0,
-    ...budgetData,
+  const expense: AICategorizedExpense = {
+    expenseId,
+    ...expenseData,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   };
   
-  await addDoc(collection(db, 'budgets'), budget);
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.EXPENSES.AI_CATEGORISE);
+  await setDoc(doc(db, collectionPath, expenseId), expense);
+  
+  // Add to transaction history
+  await addTransactionHistory({
+    source: 'ai_categorise',
+    reference_id: expenseId,
+    amount: expense.amount,
+    date: expense.date,
+    type: 'expense',
+    category: expense.predicted_category,
+    description: expense.raw_description
+  });
+  
+  return expense;
+};
+
+export const getAICategorizedExpenses = (userId: string, callback: (expenses: AICategorizedExpense[]) => void) => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.EXPENSES.AI_CATEGORISE);
+  const q = query(collection(db, collectionPath), orderBy('date', 'desc'));
+  
+  return onSnapshot(q, (snapshot) => {
+    const expenses = snapshot.docs.map(doc => doc.data() as AICategorizedExpense);
+    callback(expenses);
+  });
+};
+
+// Scanner Expenses
+export const addScannerExpense = async (expenseData: Omit<ScannerExpense, 'expenseId' | 'created_at' | 'updated_at'>): Promise<ScannerExpense> => {
+  const userId = ensureAuth();
+  const expenseId = generateId();
+  
+  const expense: ScannerExpense = {
+    expenseId,
+    ...expenseData,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.EXPENSES.SCANNER);
+  await setDoc(doc(db, collectionPath, expenseId), expense);
+  
+  // Add to transaction history
+  await addTransactionHistory({
+    source: 'scanner',
+    reference_id: expenseId,
+    amount: expense.amount,
+    date: expense.date,
+    type: 'expense',
+    category: expense.category,
+    description: expense.extracted_text.substring(0, 100) // First 100 chars as description
+  });
+  
+  return expense;
+};
+
+export const getScannerExpenses = (userId: string, callback: (expenses: ScannerExpense[]) => void) => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.EXPENSES.SCANNER);
+  const q = query(collection(db, collectionPath), orderBy('date', 'desc'));
+  
+  return onSnapshot(q, (snapshot) => {
+    const expenses = snapshot.docs.map(doc => doc.data() as ScannerExpense);
+    callback(expenses);
+  });
+};
+
+// Get all expenses (combined from all sources)
+export const getAllExpenses = async (userId: string, options: QueryOptions = {}): Promise<ExpenseWithType[]> => {
+  const allExpenses: ExpenseWithType[] = [];
+  
+  try {
+    // Fetch manual expenses
+    const manualPath = getCollectionPath(userId, COLLECTIONS.EXPENSES.MANUAL);
+    const manualSnapshot = await getDocs(collection(db, manualPath));
+    manualSnapshot.docs.forEach(doc => {
+      const data = doc.data() as ManualExpense;
+      allExpenses.push({ ...data, type: 'manual' });
+    });
+    
+    // Fetch AI categorized expenses
+    const aiPath = getCollectionPath(userId, COLLECTIONS.EXPENSES.AI_CATEGORISE);
+    const aiSnapshot = await getDocs(collection(db, aiPath));
+    aiSnapshot.docs.forEach(doc => {
+      const data = doc.data() as AICategorizedExpense;
+      allExpenses.push({ ...data, type: 'ai_categorise' });
+    });
+    
+    // Fetch scanner expenses
+    const scannerPath = getCollectionPath(userId, COLLECTIONS.EXPENSES.SCANNER);
+    const scannerSnapshot = await getDocs(collection(db, scannerPath));
+    scannerSnapshot.docs.forEach(doc => {
+      const data = doc.data() as ScannerExpense;
+      allExpenses.push({ ...data, type: 'scanner' });
+    });
+    
+    // Sort by date (newest first)
+    allExpenses.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    return allExpenses;
+  } catch (error) {
+    console.error('Error fetching all expenses:', error);
+    return [];
+  }
+};
+
+// ===== BUDGET OPERATIONS =====
+
+export const addBudget = async (budgetData: Omit<Budget, 'budgetId' | 'created_at' | 'updated_at'>): Promise<Budget> => {
+  const userId = ensureAuth();
+  const budgetId = generateId();
+  
+  const budget: Budget = {
+    budgetId,
+    ...budgetData,
+    spent_amount: 0,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.BUDGET);
+  await setDoc(doc(db, collectionPath, budgetId), budget);
+  
   return budget;
 };
 
-export const getBudgetsByUser = (userId: string, callback: (budgets: (Budget & { firebaseId: string })[]) => void) => {
-  const q = query(
-    collection(db, 'budgets'), 
-    where('user_id', '==', userId),
-    orderBy('start_date', 'desc')
-  );
+export const getBudgets = (userId: string, callback: (budgets: Budget[]) => void) => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.BUDGET);
+  const q = query(collection(db, collectionPath), orderBy('start_date', 'desc'));
   
   return onSnapshot(q, (snapshot) => {
-    const budgets = snapshot.docs.map(doc => ({
-      ...(doc.data() as Budget),
-      firebaseId: doc.id
-    }));
+    const budgets = snapshot.docs.map(doc => doc.data() as Budget);
     callback(budgets);
   });
 };
 
-export const updateBudgetSpent = async (firebaseId: string, spentAmount: number) => {
-  const budgetRef = doc(db, 'budgets', firebaseId);
-  await updateDoc(budgetRef, { spent: spentAmount });
-};
-
-// Reminders Collection Operations
-export const addReminder = async (reminderData: Omit<Reminder, 'reminder_id' | 'user_id'>) => {
-  if (!auth.currentUser) throw new Error('No authenticated user');
-  
-  const reminder: Reminder = {
-    reminder_id: generateId(),
-    user_id: auth.currentUser.uid,
-    ...reminderData,
-  };
-  
-  await addDoc(collection(db, 'reminders'), reminder);
-  return reminder;
-};
-
-export const getRemindersByUser = (userId: string, callback: (reminders: (Reminder & { firebaseId: string })[]) => void) => {
-  const q = query(
-    collection(db, 'reminders'), 
-    where('user_id', '==', userId),
-    orderBy('reminder_date', 'asc')
-  );
-  
-  return onSnapshot(q, (snapshot) => {
-    const reminders = snapshot.docs.map(doc => ({
-      ...(doc.data() as Reminder),
-      firebaseId: doc.id
-    }));
-    callback(reminders);
+export const updateBudget = async (userId: string, budgetId: string, updates: Partial<Budget>): Promise<void> => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.BUDGET);
+  await updateDoc(doc(db, collectionPath, budgetId), {
+    ...updates,
+    updated_at: new Date().toISOString()
   });
 };
 
-export const updateReminderStatus = async (firebaseId: string, status: 'Pending' | 'Completed') => {
-  const reminderRef = doc(db, 'reminders', firebaseId);
-  await updateDoc(reminderRef, { status });
+export const deleteBudget = async (userId: string, budgetId: string): Promise<void> => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.BUDGET);
+  await deleteDoc(doc(db, collectionPath, budgetId));
 };
 
-// Transaction History Collection Operations
-export const addTransaction = async (transactionData: Omit<TransactionHistory, 'transaction_id' | 'user_id'>) => {
-  if (!auth.currentUser) throw new Error('No authenticated user');
+// ===== RECURRENCE OPERATIONS =====
+
+export const addRecurrence = async (recurrenceData: Omit<Recurrence, 'recurrenceId' | 'created_at' | 'updated_at'>): Promise<Recurrence> => {
+  const userId = ensureAuth();
+  const recurrenceId = generateId();
   
-  const transaction: TransactionHistory = {
-    transaction_id: generateId(),
-    user_id: auth.currentUser.uid,
-    ...transactionData,
+  const recurrence: Recurrence = {
+    recurrenceId,
+    ...recurrenceData,
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   };
   
-  await addDoc(collection(db, 'transactions_history'), transaction);
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.RECURRENCE);
+  await setDoc(doc(db, collectionPath, recurrenceId), recurrence);
   
-  // Update user balance
-  const currentUser = await getUserById(auth.currentUser.uid);
-  if (currentUser) {
-    const balanceChange = transaction.type === 'Credit' ? transaction.amount : -transaction.amount;
-    const newBalance = currentUser.balance + balanceChange;
-    await updateUserBalance(auth.currentUser.uid, newBalance);
-  }
+  return recurrence;
+};
+
+export const getRecurrences = (userId: string, callback: (recurrences: Recurrence[]) => void) => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.RECURRENCE);
+  const q = query(collection(db, collectionPath), orderBy('next_due_date', 'asc'));
+  
+  return onSnapshot(q, (snapshot) => {
+    const recurrences = snapshot.docs.map(doc => doc.data() as Recurrence);
+    callback(recurrences);
+  });
+};
+
+export const updateRecurrence = async (userId: string, recurrenceId: string, updates: Partial<Recurrence>): Promise<void> => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.RECURRENCE);
+  await updateDoc(doc(db, collectionPath, recurrenceId), {
+    ...updates,
+    updated_at: new Date().toISOString()
+  });
+};
+
+// ===== GOAL OPERATIONS =====
+
+export const addSetGoal = async (goalData: Omit<SetGoal, 'goalId' | 'created_at' | 'updated_at'>): Promise<SetGoal> => {
+  const userId = ensureAuth();
+  const goalId = generateId();
+  
+  const goal: SetGoal = {
+    goalId,
+    ...goalData,
+    is_completed: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.SETGOAL);
+  await setDoc(doc(db, collectionPath, goalId), goal);
+  
+  return goal;
+};
+
+export const getSetGoals = (userId: string, callback: (goals: SetGoal[]) => void) => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.SETGOAL);
+  const q = query(collection(db, collectionPath), orderBy('deadline', 'asc'));
+  
+  return onSnapshot(q, (snapshot) => {
+    const goals = snapshot.docs.map(doc => doc.data() as SetGoal);
+    callback(goals);
+  });
+};
+
+export const updateSetGoal = async (userId: string, goalId: string, updates: Partial<SetGoal>): Promise<void> => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.SETGOAL);
+  await updateDoc(doc(db, collectionPath, goalId), {
+    ...updates,
+    updated_at: new Date().toISOString()
+  });
+};
+
+// ===== TRANSACTION HISTORY OPERATIONS =====
+
+export const addTransactionHistory = async (transactionData: Omit<TransactionHistory, 'transactionId' | 'created_at'>): Promise<TransactionHistory> => {
+  const userId = ensureAuth();
+  const transactionId = generateId();
+  
+  const transaction: TransactionHistory = {
+    transactionId,
+    ...transactionData,
+    created_at: new Date().toISOString()
+  };
+  
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.TRANSACTION_HISTORY);
+  await setDoc(doc(db, collectionPath, transactionId), transaction);
   
   return transaction;
 };
 
-export const getTransactionsByUser = (userId: string, callback: (transactions: (TransactionHistory & { firebaseId: string })[]) => void) => {
-  const q = query(
-    collection(db, 'transactions_history'), 
-    where('user_id', '==', userId),
-    orderBy('transaction_date', 'desc')
-  );
+export const getTransactionHistory = (userId: string, callback: (transactions: TransactionHistory[]) => void) => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.TRANSACTION_HISTORY);
+  const q = query(collection(db, collectionPath), orderBy('date', 'desc'));
   
   return onSnapshot(q, (snapshot) => {
-    const transactions = snapshot.docs.map(doc => ({
-      ...(doc.data() as TransactionHistory),
-      firebaseId: doc.id
-    }));
+    const transactions = snapshot.docs.map(doc => doc.data() as TransactionHistory);
     callback(transactions);
   });
 };
 
-// Smart Suggestions Collection Operations
-export const addSmartSuggestion = async (suggestionData: Omit<SmartSuggestion, 'suggestion_id' | 'user_id' | 'created_at' | 'status'>) => {
-  if (!auth.currentUser) throw new Error('No authenticated user');
+// ===== AI INSIGHTS OPERATIONS =====
+
+export const addAIInsight = async (insightData: Omit<AIInsight, 'insightId' | 'created_at'>): Promise<AIInsight> => {
+  const userId = ensureAuth();
+  const insightId = generateId();
   
-  const suggestion: SmartSuggestion = {
-    suggestion_id: generateId(),
-    user_id: auth.currentUser.uid,
-    created_at: new Date().toISOString(),
-    status: 'New',
-    ...suggestionData,
+  const insight: AIInsight = {
+    insightId,
+    ...insightData,
+    is_read: false,
+    created_at: new Date().toISOString()
   };
   
-  await addDoc(collection(db, 'smart_suggestions'), suggestion);
-  return suggestion;
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.AI_INSIGHTS);
+  await setDoc(doc(db, collectionPath, insightId), insight);
+  
+  return insight;
 };
 
-export const getSmartSuggestionsByUser = (userId: string, callback: (suggestions: (SmartSuggestion & { firebaseId: string })[]) => void) => {
-  const q = query(
-    collection(db, 'smart_suggestions'), 
-    where('user_id', '==', userId),
-    orderBy('created_at', 'desc')
-  );
+export const getAIInsights = (userId: string, callback: (insights: AIInsight[]) => void) => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.AI_INSIGHTS);
+  const q = query(collection(db, collectionPath), orderBy('created_at', 'desc'));
   
   return onSnapshot(q, (snapshot) => {
-    const suggestions = snapshot.docs.map(doc => ({
-      ...(doc.data() as SmartSuggestion),
-      firebaseId: doc.id
-    }));
-    callback(suggestions);
+    const insights = snapshot.docs.map(doc => doc.data() as AIInsight);
+    callback(insights);
   });
 };
 
-export const updateSuggestionStatus = async (firebaseId: string, status: 'New' | 'Viewed' | 'Implemented') => {
-  const suggestionRef = doc(db, 'smart_suggestions', firebaseId);
-  await updateDoc(suggestionRef, { status });
+export const markInsightAsRead = async (userId: string, insightId: string): Promise<void> => {
+  const collectionPath = getCollectionPath(userId, COLLECTIONS.AI_INSIGHTS);
+  await updateDoc(doc(db, collectionPath, insightId), {
+    is_read: true
+  });
 };
 
-// Analytics and Helper Functions
-export const getUserExpenseSummary = async (userId: string, startDate: string, endDate: string) => {
-  const q = query(
-    collection(db, 'expenses'),
-    where('user_id', '==', userId),
-    where('date', '>=', startDate),
-    where('date', '<=', endDate)
+// ===== ANALYTICS AND HELPER FUNCTIONS =====
+
+export const getUserAnalytics = async (userId: string, startDate: string, endDate: string) => {
+  const allExpenses = await getAllExpenses(userId);
+  
+  // Filter by date range
+  const filteredExpenses = allExpenses.filter(expense => 
+    expense.date >= startDate && expense.date <= endDate
   );
   
-  const snapshot = await getDocs(q);
-  const expenses = snapshot.docs.map(doc => doc.data() as Expense);
+  const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
   
-  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const categoryBreakdown = expenses.reduce((acc, expense) => {
-    acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
+  // Category breakdown
+  const categoryBreakdown = filteredExpenses.reduce((acc, expense) => {
+    const category = expense.category || 'Other';
+    acc[category] = (acc[category] || 0) + expense.amount;
+    return acc;
+  }, {} as Record<string, number>);
+  
+  // Source breakdown (manual, AI, scanner)
+  const sourceBreakdown = filteredExpenses.reduce((acc, expense) => {
+    acc[expense.type] = (acc[expense.type] || 0) + expense.amount;
     return acc;
   }, {} as Record<string, number>);
   
   return {
     totalExpenses,
+    totalTransactions: filteredExpenses.length,
+    averageTransaction: totalExpenses / filteredExpenses.length || 0,
     categoryBreakdown,
-    transactionCount: expenses.length,
+    sourceBreakdown,
+    period: { startDate, endDate }
   };
 };
 
-export const getBudgetProgress = async (userId: string) => {
-  const q = query(collection(db, 'budgets'), where('user_id', '==', userId));
-  const snapshot = await getDocs(q);
-  const budgets = snapshot.docs.map(doc => doc.data() as Budget);
+// Helper function to calculate budget spending
+export const calculateBudgetSpending = async (userId: string, budgetId: string): Promise<number> => {
+  const budget = await getDoc(doc(db, getCollectionPath(userId, COLLECTIONS.BUDGET), budgetId));
+  if (!budget.exists()) return 0;
   
-  return budgets.map(budget => ({
-    ...budget,
-    progress: (budget.spent / budget.amount_limit) * 100,
-    remaining: budget.amount_limit - budget.spent,
-    isOverBudget: budget.spent > budget.amount_limit,
-  }));
+  const budgetData = budget.data() as Budget;
+  const allExpenses = await getAllExpenses(userId);
+  
+  // Filter expenses by category and date range
+  const relevantExpenses = allExpenses.filter(expense => 
+    expense.category === budgetData.category &&
+    expense.date >= budgetData.start_date &&
+    expense.date <= budgetData.end_date
+  );
+  
+  return relevantExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+};
+
+// Export current user ID helper
+export const getCurrentUserId = (): string => {
+  return ensureAuth();
+};
+
+// Export database service object for easier imports
+export const databaseService = {
+  // User management
+  createUser,
+  getUserById,
+  updateUserProfile,
+
+  // Manual expenses
+  addManualExpense,
+  updateManualExpense,
+  deleteManualExpense,
+  getManualExpenses,
+
+  // AI categorized expenses
+  addAICategorizedExpense,
+  getAICategorizedExpenses,
+
+  // Scanner expenses
+  addScannerExpense,
+  getScannerExpenses,
+
+  // Combined expenses
+  getAllExpenses,
+
+  // Budget management
+  addBudget,
+  updateBudget,
+  deleteBudget,
+  getBudgets,
+
+  // Recurrence management
+  addRecurrence,
+  updateRecurrence,
+  getRecurrences,
+
+  // Goals management
+  addSetGoal,
+  updateSetGoal,
+  getSetGoals,
+
+  // Transaction history
+  addTransactionHistory,
+  getTransactionHistory,
+
+  // AI insights
+  addAIInsight,
+  getAIInsights,
+
+  // Utility functions
+  getCurrentUserId
 };

@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -17,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { EnhancedFirebaseService } from '../services/enhancedFirebaseService';
 
@@ -217,7 +217,7 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
     setAiAnalyzing(true);
     try {
       // Call AI categorization API - use network IP instead of localhost for mobile/emulator access
-      const response = await fetch('http://10.217.57.202:8001/api/categorize', {
+      const response = await fetch('http://10.195.3.148:8001/api/categorize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

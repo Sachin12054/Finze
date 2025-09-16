@@ -4,7 +4,27 @@
  */
 
 import { BACKEND_CONFIG, findBestBackendUrl, getDefaultBackendUrl } from '../config/backendConfig';
-import { ExtractedDetails } from '../types/expense';
+
+export interface ExtractedDetails {
+  total_amount: number;
+  merchant_name: string;
+  date: string;
+  category?: string;
+  extracted_text: string;
+  image_url?: string;
+  items?: any[];
+  extraction_confidence?: number;
+  processing_time?: string;
+  currency?: string;
+  merchant_address?: string;
+  time?: string;
+  subcategory?: string;
+  payment_method?: string;
+  receipt_number?: string;
+  tax_amount?: number;
+  discount_amount?: number;
+  [key: string]: any; // Allow additional properties
+}
 
 export interface ReceiptScanResponse {
   status: 'success' | 'error';
@@ -405,6 +425,7 @@ class ReceiptScannerService {
       merchant_name: data.merchant_name || 'Unknown Merchant',
       category: data.category || 'Other',
       date: data.date || new Date().toISOString(),
+      extracted_text: data.extracted_text || data.raw_text || 'Text extraction failed',
       items: data.items || [],
       extraction_confidence: data.confidence_score || 0.8,
       processing_time: data.processed_at || new Date().toISOString(),

@@ -18,7 +18,6 @@ import {
   Modal,
   Platform,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -28,6 +27,7 @@ import {
   View
 } from 'react-native';
 import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { auth, db } from '../../src/services/firebase';
 
@@ -102,7 +102,7 @@ export default function ExploreDashboard() {
   const [monthlyExpenses, setMonthlyExpenses] = useState(0);
   
   // UI states
-  const [activeTab, setActiveTab] = useState<'overview' | 'budgets' | 'goals' | 'recurring' | 'insights'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'budgets' | 'goals' | 'recurring' | 'insights' | 'scanner-history'>('overview');
   const [isBalanceVisible, setIsBalanceVisible] = useState(true);
   
   // Modal states
@@ -530,15 +530,15 @@ export default function ExploreDashboard() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.loadingContainer, { backgroundColor: isDarkTheme ? '#0f172a' : '#f8fafc' }]}>
+      <View style={[styles.loadingContainer, { backgroundColor: isDarkTheme ? '#0f172a' : '#f8fafc' }]}>
         <Text style={[styles.loadingText, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Loading Dashboard...</Text>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDarkTheme ? '#0f172a' : '#f8fafc' }]}>
-      <StatusBar barStyle={isDarkTheme ? "light-content" : "dark-content"} backgroundColor={isDarkTheme ? "#0f172a" : "#f8fafc"} />
+    <View style={[styles.container, { backgroundColor: isDarkTheme ? '#0f172a' : '#f8fafc' }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#6366F1" />
       
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -553,38 +553,32 @@ export default function ExploreDashboard() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
-          <Animated.View entering={FadeInDown.delay(100)} style={styles.header}>
-            <View style={styles.headerContent}>
-              <View style={styles.headerLeft}>
-                <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}</Text>
-                <Text style={styles.userName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>
-                  {user?.displayName || user?.email?.split('@')[0] || "Dashboard"}
-                </Text>
+          <SafeAreaView>
+            <Animated.View entering={FadeInDown.delay(100)} style={styles.header}>
+              <View style={styles.headerContent}>
+                <View style={styles.headerLeft}>
+                  <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}</Text>
+                  <Text style={styles.userName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>
+                    {user?.displayName || user?.email?.split('@')[0] || "Dashboard"}
+                  </Text>
+                </View>
+                <View style={styles.headerRight}>
+                  <TouchableOpacity
+                    style={styles.themeToggle}
+                    onPress={toggleTheme}
+                    accessibilityLabel="Toggle theme"
+                  >
+                    <Ionicons 
+                      name={isDarkTheme ? "sunny" : "moon"} 
+                      size={22} 
+                      color="white" 
+                    />
+                  </TouchableOpacity>
+                  
+                </View>
               </View>
-              <View style={styles.headerRight}>
-                <TouchableOpacity
-                  style={styles.themeToggle}
-                  onPress={toggleTheme}
-                  accessibilityLabel="Toggle theme"
-                >
-                  <Ionicons 
-                    name={isDarkTheme ? "sunny" : "moon"} 
-                    size={22} 
-                    color="white" 
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.profileButton}
-                  onPress={() => {}}
-                  accessibilityLabel="Open profile"
-                >
-                  <View style={styles.profileIcon}>
-                    <Ionicons name="person" size={26} color="white" />
-                  </View>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Animated.View>
+            </Animated.View>
+          </SafeAreaView>
         </LinearGradient>
 
         {/* Tab Navigation */}
@@ -595,7 +589,8 @@ export default function ExploreDashboard() {
               { key: 'budgets', label: 'Budgets', icon: 'wallet-outline' },
               { key: 'goals', label: 'Goals', icon: 'flag-outline' },
               { key: 'recurring', label: 'Recurring', icon: 'repeat-outline' },
-              { key: 'insights', label: 'Insights', icon: 'bulb-outline' }
+              { key: 'insights', label: 'Insights', icon: 'bulb-outline' },
+              { key: 'scanner-history', label: 'Scanner', icon: 'scan-outline' }
             ].map((tab, index) => (
               <Animated.View
                 key={tab.key}
@@ -637,7 +632,7 @@ export default function ExploreDashboard() {
               style={styles.quickActionsContainer}
             >
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Quick Actions</Text>
+                <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Quick Actions</Text>
               </View>
               
               {/* Essential Actions Grid */}
@@ -649,8 +644,8 @@ export default function ExploreDashboard() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.essentialActionContent}>
-                    <View style={[styles.essentialActionIcon, { backgroundColor: '#E8F2FF' }]}>
-                      <Ionicons name="wallet" size={26} color="#2563EB" />
+                    <View style={[styles.essentialActionIcon, { backgroundColor: isDarkTheme ? '#1e40af' : '#E8F2FF' }]}>
+                      <Ionicons name="wallet" size={26} color={isDarkTheme ? '#93c5fd' : '#2563EB'} />
                     </View>
                     <Text style={[styles.essentialActionTitle, { color: isDarkTheme ? '#ffffff' : '#1E293B' }]}>Create Budget</Text>
                     <Text style={[styles.essentialActionSubtitle, { color: isDarkTheme ? '#9ca3af' : '#64748B' }]}>Track spending</Text>
@@ -664,8 +659,8 @@ export default function ExploreDashboard() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.essentialActionContent}>
-                    <View style={[styles.essentialActionIcon, { backgroundColor: '#F3E8FF' }]}>
-                      <Ionicons name="repeat" size={26} color="#9333EA" />
+                    <View style={[styles.essentialActionIcon, { backgroundColor: isDarkTheme ? '#7c3aed' : '#F3E8FF' }]}>
+                      <Ionicons name="repeat" size={26} color={isDarkTheme ? '#c4b5fd' : '#9333EA'} />
                     </View>
                     <Text style={[styles.essentialActionTitle, { color: isDarkTheme ? '#ffffff' : '#1E293B' }]}>Add Recurring</Text>
                     <Text style={[styles.essentialActionSubtitle, { color: isDarkTheme ? '#9ca3af' : '#64748B' }]}>Automate bills</Text>
@@ -679,8 +674,8 @@ export default function ExploreDashboard() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.essentialActionContent}>
-                    <View style={[styles.essentialActionIcon, { backgroundColor: '#E0F7FA' }]}>
-                      <Ionicons name="flag" size={26} color="#0891B2" />
+                    <View style={[styles.essentialActionIcon, { backgroundColor: isDarkTheme ? '#0891b2' : '#E0F7FA' }]}>
+                      <Ionicons name="flag" size={26} color={isDarkTheme ? '#67e8f9' : '#0891B2'} />
                     </View>
                     <Text style={[styles.essentialActionTitle, { color: isDarkTheme ? '#ffffff' : '#1E293B' }]}>Set Goal</Text>
                     <Text style={[styles.essentialActionSubtitle, { color: isDarkTheme ? '#9ca3af' : '#64748B' }]}>Save money</Text>
@@ -689,16 +684,16 @@ export default function ExploreDashboard() {
 
                 <TouchableOpacity
                   style={[styles.essentialActionCard, { backgroundColor: isDarkTheme ? '#1f2937' : '#ffffff', borderColor: isDarkTheme ? '#374151' : '#F1F5F9' }]}
-                  onPress={() => {}}
-                  accessibilityLabel="Scan receipt"
+                  onPress={() => setActiveTab('scanner-history')}
+                  accessibilityLabel="View scanner history"
                   activeOpacity={0.7}
                 >
                   <View style={styles.essentialActionContent}>
-                    <View style={[styles.essentialActionIcon, { backgroundColor: '#FEF2F2' }]}>
-                      <Ionicons name="scan" size={26} color="#DC2626" />
+                    <View style={[styles.essentialActionIcon, { backgroundColor: isDarkTheme ? '#dc2626' : '#FEF2F2' }]}>
+                      <Ionicons name="receipt-outline" size={26} color={isDarkTheme ? '#fca5a5' : '#DC2626'} />
                     </View>
-                    <Text style={[styles.essentialActionTitle, { color: isDarkTheme ? '#ffffff' : '#1E293B' }]}>Smart Scan</Text>
-                    <Text style={[styles.essentialActionSubtitle, { color: isDarkTheme ? '#9ca3af' : '#64748B' }]}>Receipt AI</Text>
+                    <Text style={[styles.essentialActionTitle, { color: isDarkTheme ? '#ffffff' : '#1E293B' }]}>Scanner History</Text>
+                    <Text style={[styles.essentialActionSubtitle, { color: isDarkTheme ? '#9ca3af' : '#64748B' }]}>Receipt scans</Text>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -791,6 +786,12 @@ export default function ExploreDashboard() {
             suggestions={smartSuggestions}
             transactions={transactions}
             budgets={budgets}
+            isDarkTheme={isDarkTheme}
+          />
+        )}
+
+        {activeTab === 'scanner-history' && (
+          <ScannerHistoryTab
             isDarkTheme={isDarkTheme}
           />
         )}
@@ -990,7 +991,7 @@ export default function ExploreDashboard() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1334,6 +1335,226 @@ function RecurringTab({ recurring, onToggleStatus, onDeleteRecurring, isDarkThem
   );
 }
 
+// Component: Scanner History Tab
+function ScannerHistoryTab({ isDarkTheme }: {
+  isDarkTheme: boolean;
+}) {
+  const [scannerExpenses, setScannerExpenses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const loadScannerHistory = async () => {
+      try {
+        const expenses = await EnhancedFirebaseService.getScannerExpenses();
+        setScannerExpenses(expenses);
+      } catch (error) {
+        console.error('Error loading scanner history:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadScannerHistory();
+  }, []);
+
+  const toggleExpanded = (expenseId: string) => {
+    const newExpanded = new Set(expandedItems);
+    if (newExpanded.has(expenseId)) {
+      newExpanded.delete(expenseId);
+    } else {
+      newExpanded.add(expenseId);
+    }
+    setExpandedItems(newExpanded);
+  };
+
+  const formatCurrency = (amount: number | undefined | null) => {
+    // Handle undefined, null, NaN, or invalid numbers
+    if (amount === undefined || amount === null || isNaN(amount) || typeof amount !== 'number') {
+      return '₹0.00';
+    }
+    return `₹${amount.toFixed(2)}`;
+  };
+
+  const safeToFixed = (value: number | undefined | null, decimals: number = 2): string => {
+    if (value === undefined || value === null || isNaN(value) || typeof value !== 'number') {
+      if (decimals === 0) return '0';
+      return '0.' + '0'.repeat(decimals);
+    }
+    return value.toFixed(decimals);
+  };
+
+  if (loading) {
+    return (
+      <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
+        <View style={styles.sectionTitleRow}>
+          <Ionicons name="scan-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
+          <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Scanner History</Text>
+        </View>
+        <View style={styles.loadingState}>
+          <Text style={[styles.loadingText, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>Loading scanner history...</Text>
+        </View>
+      </Animated.View>
+    );
+  }
+
+  return (
+    <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
+      <View style={styles.sectionTitleRow}>
+        <Ionicons name="scan-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
+        <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Scanner History</Text>
+      </View>
+      
+      {scannerExpenses.map((expense) => {
+        const isExpanded = expandedItems.has(expense.id);
+        const subtotal = parseFloat(expense.subtotalAmount) || 0;
+        const gst = parseFloat(expense.gstAmount) || 0;
+        const totalWithGST = subtotal + gst;
+        
+        return (
+          <LinearGradient
+            key={expense.id}
+            colors={isDarkTheme ? ['#1f2937', '#374151'] : ['#ffffff', '#f8fafc']}
+            style={[styles.scannerExpenseCard, { borderColor: isDarkTheme ? '#374151' : '#e2e8f0' }]}
+          >
+            <TouchableOpacity
+              onPress={() => toggleExpanded(expense.id)}
+              style={styles.scannerExpenseHeader}
+            >
+              <View style={styles.scannerExpenseMainInfo}>
+                <View style={styles.scannerExpenseTitle}>
+                  <Ionicons 
+                    name="receipt" 
+                    size={20} 
+                    color={isDarkTheme ? '#10b981' : '#059669'} 
+                    style={styles.scannerIcon}
+                  />
+                  <Text style={[styles.scannerMerchantName, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                    {expense.merchantName || 'Unknown Merchant'}
+                  </Text>
+                </View>
+                
+                <View style={styles.scannerExpenseAmountSection}>
+                  <Text style={[styles.scannerTotalAmount, { color: isDarkTheme ? '#10b981' : '#059669' }]}>
+                    {formatCurrency(totalWithGST)}
+                  </Text>
+                  <Text style={[styles.scannerDate, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>
+                    {new Date(expense.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.scannerExpenseSecondaryInfo}>
+                <View style={styles.scannerCategoryBadge}>
+                  <Text style={[styles.scannerCategoryText, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                    {expense.category || 'Other'}
+                  </Text>
+                </View>
+                
+                <Ionicons 
+                  name={isExpanded ? 'chevron-up' : 'chevron-down'} 
+                  size={20} 
+                  color={isDarkTheme ? '#9ca3af' : '#64748b'} 
+                />
+              </View>
+            </TouchableOpacity>
+
+            {isExpanded && (
+              <Animated.View entering={FadeInDown.duration(300)} style={styles.scannerExpenseDetails}>
+                <View style={styles.scannerDetailsSection}>
+                  <Text style={[styles.scannerDetailsSectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                    Transaction Details
+                  </Text>
+                  
+                  <View style={styles.scannerDetailsGrid}>
+                    <View style={styles.scannerDetailItem}>
+                      <Text style={[styles.scannerDetailLabel, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>Subtotal:</Text>
+                      <Text style={[styles.scannerDetailValue, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                        {formatCurrency(expense.subtotalAmount)}
+                      </Text>
+                    </View>
+                    
+                    {gst > 0 && (
+                      <View style={styles.scannerDetailItem}>
+                        <Text style={[styles.scannerDetailLabel, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>GST:</Text>
+                        <Text style={[styles.scannerDetailValue, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                          {formatCurrency(gst)}
+                        </Text>
+                      </View>
+                    )}
+                    
+                    <View style={styles.scannerDetailItem}>
+                      <Text style={[styles.scannerDetailLabel, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>Total:</Text>
+                      <Text style={[styles.scannerDetailValue, { color: isDarkTheme ? '#10b981' : '#059669', fontWeight: 'bold' }]}>
+                        {formatCurrency(totalWithGST)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {expense.items && expense.items.length > 0 && (
+                  <View style={styles.scannerDetailsSection}>
+                    <Text style={[styles.scannerDetailsSectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                      Items ({expense.items.length})
+                    </Text>
+                    
+                    {expense.items.slice(0, 5).map((item: any, index: number) => (
+                      <View key={index} style={styles.scannerItemRow}>
+                        <Text style={[styles.scannerItemName, { color: isDarkTheme ? '#e5e7eb' : '#374151' }]} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <View style={styles.scannerItemDetails}>
+                          {item.quantity && (
+                            <Text style={[styles.scannerItemQuantity, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>
+                              ×{item.quantity}
+                            </Text>
+                          )}
+                          <Text style={[styles.scannerItemPrice, { color: isDarkTheme ? '#10b981' : '#059669' }]}>
+                            {formatCurrency(item.price)}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                    
+                    {expense.items.length > 5 && (
+                      <Text style={[styles.scannerItemsMore, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>
+                        +{expense.items.length - 5} more items
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {expense.notes && (
+                  <View style={styles.scannerDetailsSection}>
+                    <Text style={[styles.scannerDetailsSectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                      Notes
+                    </Text>
+                    <Text style={[styles.scannerNotesText, { color: isDarkTheme ? '#e5e7eb' : '#374151' }]}>
+                      {expense.notes}
+                    </Text>
+                  </View>
+                )}
+              </Animated.View>
+            )}
+          </LinearGradient>
+        );
+      })}
+      
+      {scannerExpenses.length === 0 && (
+        <View style={styles.emptyState}>
+          <Ionicons name="scan-outline" size={48} color={isDarkTheme ? '#4b5563' : '#9ca3af'} />
+          <Text style={[styles.emptyStateText, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>
+            No receipt scans yet
+          </Text>
+          <Text style={[styles.emptyStateSubtext, { color: isDarkTheme ? '#6b7280' : '#9ca3af' }]}>
+            Use the scanner in the main app to scan receipts
+          </Text>
+        </View>
+      )}
+    </Animated.View>
+  );
+}
+
 // Component: Insights Tab
 function InsightsTab({ suggestions, transactions, budgets, isDarkTheme }: {
   suggestions: SmartSuggestion[];
@@ -1439,8 +1660,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
+    scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 120,
+  },
   header: {
-    marginTop: 8,
+    flex: 1,
   },
   headerGradient: {
     paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight || 0) + 20,
@@ -1448,6 +1675,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
+    marginTop: Platform.OS === 'android' ? -(StatusBar.currentHeight || 0) : 0,
   },
   headerContent: {
     flexDirection: 'row',
@@ -1635,7 +1863,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginBottom: 16,
+    marginBottom: 4,
   },
   sectionTitleRow: {
     flexDirection: 'row',
@@ -2212,13 +2440,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 11,
   },
   essentialActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    paddingHorizontal: 0,
+    paddingHorizontal: -5,
   },
   essentialActionCard: {
     width: '48%',
@@ -2357,5 +2585,141 @@ const styles = StyleSheet.create({
   transactionAmountText: {
     fontSize: 18,
     fontWeight: '800',
+  },
+  
+  // Scanner History Styles
+  loadingState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  scannerExpenseCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  scannerExpenseHeader: {
+    marginBottom: 12,
+  },
+  scannerExpenseMainInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  scannerExpenseTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
+  },
+  scannerIcon: {
+    marginRight: 8,
+  },
+  scannerMerchantName: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  scannerExpenseAmountSection: {
+    alignItems: 'flex-end',
+  },
+  scannerTotalAmount: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  scannerDate: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  scannerExpenseSecondaryInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  scannerCategoryBadge: {
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  scannerCategoryText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  scannerExpenseDetails: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(156, 163, 175, 0.3)',
+    paddingTop: 16,
+    marginTop: 8,
+  },
+  scannerDetailsSection: {
+    marginBottom: 16,
+  },
+  scannerDetailsSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  scannerDetailsGrid: {
+    gap: 8,
+  },
+  scannerDetailItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  scannerDetailLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  scannerDetailValue: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  scannerItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(156, 163, 175, 0.2)',
+  },
+  scannerItemName: {
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+    marginRight: 12,
+  },
+  scannerItemDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  scannerItemQuantity: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  scannerItemPrice: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  scannerItemsMore: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  scannerNotesText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: 'italic',
   },
 });

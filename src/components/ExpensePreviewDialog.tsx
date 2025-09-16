@@ -4,13 +4,13 @@ import {
     ActivityIndicator,
     Alert,
     Modal,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import { receiptScannerService } from '../services/receiptScannerService';
 import { ExtractedDetails } from '../types/expense';
@@ -56,7 +56,15 @@ const ExpensePreviewDialog: React.FC<ExpensePreviewDialogProps> = ({
       setIsSaving(true);
 
       // Try to save to backend
-      const result = await receiptScannerService.saveExpense('user_123', extractedData);
+      const backendData = {
+        total_amount: extractedData.total_amount || 0,
+        merchant_name: extractedData.merchant_name || 'Unknown',
+        date: extractedData.date || new Date().toISOString(),
+        category: extractedData.category,
+        extracted_text: extractedData.notes || '',
+        ...extractedData
+      };
+      const result = await receiptScannerService.saveExpense('user_123', backendData);
       
       if (result.status === 'success') {
         Alert.alert(
