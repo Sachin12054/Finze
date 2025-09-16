@@ -1,3 +1,7 @@
+// Empty chart components for AnalyticsTab compatibility
+export const BarChartComponent: React.FC<{ weeklySpending: any[]; isDarkTheme: boolean }> = () => <CategorySpendingChart />;
+export const LineChartComponent: React.FC<{ monthlyTrend: any[]; isDarkTheme: boolean }> = () => <CategorySpendingChart />;
+export const PieChartComponent: React.FC<{ categoryData: any[]; isDarkTheme: boolean }> = () => <CategorySpendingChart />;
 // src/components/ChartComponents.tsx
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';

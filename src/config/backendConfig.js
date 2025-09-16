@@ -5,7 +5,7 @@
 
 // Backend URL options in order of preference
 const BACKEND_URLS = [
-  'http://10.12.70.202:8001/api',  // Network IP (for physical devices)
+  'http://10.217.57.202:8001/api',  // Network IP (for physical devices)
   'http://localhost:8001/api',      // Localhost (for web/desktop)
   'http://127.0.0.1:8001/api',     // Loopback (backup)
   'http://10.0.2.2:8001/api',      // Android emulator

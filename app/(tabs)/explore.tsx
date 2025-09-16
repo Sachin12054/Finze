@@ -823,7 +823,7 @@ export default function ExploreDashboard() {
               <Picker
                 selectedValue={recurringForm.category}
                 style={styles.picker}
-                onValueChange={(itemValue) => setRecurringForm({...recurringForm, category: itemValue})}
+                onValueChange={(itemValue, _itemIndex) => setRecurringForm({...recurringForm, category: itemValue as string})}
               >
                 <Picker.Item label="Select Category" value="" />
                 {categories.map((cat) => (
@@ -836,7 +836,7 @@ export default function ExploreDashboard() {
               <Picker
                 selectedValue={recurringForm.type}
                 style={styles.picker}
-                onValueChange={(itemValue) => setRecurringForm({...recurringForm, type: itemValue})}
+                onValueChange={(itemValue, _itemIndex) => setRecurringForm({...recurringForm, type: itemValue as 'income' | 'expense'})}
               >
                 <Picker.Item label="Expense" value="expense" />
                 <Picker.Item label="Income" value="income" />
@@ -847,7 +847,7 @@ export default function ExploreDashboard() {
               <Picker
                 selectedValue={recurringForm.frequency}
                 style={styles.picker}
-                onValueChange={(itemValue) => setRecurringForm({...recurringForm, frequency: itemValue})}
+                onValueChange={(itemValue, _itemIndex) => setRecurringForm({...recurringForm, frequency: itemValue as 'daily' | 'weekly' | 'monthly' | 'yearly'})}
               >
                 <Picker.Item label="Daily" value="daily" />
                 <Picker.Item label="Weekly" value="weekly" />
@@ -884,7 +884,7 @@ export default function ExploreDashboard() {
               <Picker
                 selectedValue={budgetForm.category}
                 style={styles.picker}
-                onValueChange={(itemValue) => setBudgetForm({...budgetForm, category: itemValue})}
+                onValueChange={(itemValue, _itemIndex) => setBudgetForm({...budgetForm, category: itemValue as string})}
               >
                 <Picker.Item label="Select Category" value="" />
                 {categories.map((cat) => (
@@ -906,7 +906,7 @@ export default function ExploreDashboard() {
               <Picker
                 selectedValue={budgetForm.period}
                 style={styles.picker}
-                onValueChange={(itemValue) => setBudgetForm({...budgetForm, period: itemValue})}
+                onValueChange={(itemValue, _itemIndex) => setBudgetForm({...budgetForm, period: itemValue as 'weekly' | 'monthly' | 'yearly'})}
               >
                 <Picker.Item label="Weekly" value="weekly" />
                 <Picker.Item label="Monthly" value="monthly" />
@@ -1174,7 +1174,7 @@ function SavingsGoalsTab({ goals, onDeleteGoal, onUpdateProgress, isDarkTheme }:
                         { text: 'Cancel', style: 'cancel' },
                         {
                           text: 'Add',
-                          onPress: (amount) => {
+                          onPress: (amount: string | undefined) => {
                             const numAmount = parseFloat(amount || '0');
                             if (numAmount > 0) {
                               onUpdateProgress(goal.id!, numAmount);

@@ -6,4 +6,5 @@ export interface LegacyExpense {
   category?: string;
   type: 'income' | 'expense';
   source?: string;
+  description?: string;
 }
