@@ -69,7 +69,7 @@ class AICategorization {
   private baseUrl: string;
   private timeout: number;
 
-  constructor(baseUrl: string = 'http://127.0.0.1:8000/api') {
+  constructor(baseUrl: string = 'https://finze-backend-fnah.onrender.com/api') {
     this.baseUrl = baseUrl;
     this.timeout = 10000; // 10 seconds
   }

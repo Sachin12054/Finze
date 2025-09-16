@@ -216,8 +216,8 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
 
     setAiAnalyzing(true);
     try {
-      // Call AI categorization API - use network IP instead of localhost for mobile/emulator access
-      const response = await fetch('http://10.195.3.148:8001/api/categorize', {
+      // Call AI categorization API - using Render deployment
+      const response = await fetch('https://finze-backend-fnah.onrender.com/api/categorize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

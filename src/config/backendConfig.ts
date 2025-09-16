@@ -5,6 +5,7 @@
 
 // Backend URL options in order of preference
 export const BACKEND_URLS = [
+  'https://finze-backend-fnah.onrender.com/api',  // Render production deployment (primary)
   'http://10.195.3.148:8001/api',  // Network IP (for physical devices)
   'http://localhost:8001/api',      // Localhost (for web/desktop) 
   'http://127.0.0.1:8001/api',     // Loopback (backup)
@@ -65,10 +66,10 @@ export async function findBestBackendUrl(): Promise<string | null> {
 }
 
 /**
- * Get the default backend URL (network IP)
+ * Get the default backend URL (Render production)
  */
 export function getDefaultBackendUrl(): string {
-  return BACKEND_URLS[0]; // Network IP
+  return BACKEND_URLS[0]; // Render production URL
 }
 
 /**

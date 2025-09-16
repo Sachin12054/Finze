@@ -87,6 +87,19 @@ Backend/models/*/model.safetensors
 Backend/models/*/checkpoint-*
 checkpoint-*//
 
+# Large DistilBERT Model (9GB) - exclude from Git
+Backend/models/expense_distilbert/
+expense_distilbert/
+models/expense_distilbert/
+**/expense_distilbert/
+# Keep only essential model files for deployment
+!Backend/models/expense_distilbert/config.json
+!Backend/models/expense_distilbert/label_map.json
+!Backend/models/expense_distilbert/tokenizer.json
+!Backend/models/expense_distilbert/tokenizer_config.json
+!Backend/models/expense_distilbert/special_tokens_map.json
+!Backend/models/expense_distilbert/vocab.txt
+
 # Backup files
 *.zip
 Backup/

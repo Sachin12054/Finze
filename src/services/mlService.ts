@@ -41,9 +41,9 @@ export interface OCRResult {
   ml_prediction?: MLPrediction;
 }
 
-const ML_API_BASE_URL = 'http://localhost:8000/api';
+const ML_API_BASE_URL = 'https://finze-backend-fnah.onrender.com/api';
 // OCR Service Configuration
-const OCR_BASE_URL = 'http://localhost:8003/api';
+const OCR_BASE_URL = 'https://finze-backend-fnah.onrender.com/api';
 
 export class MLService {
   static async categorizeExpense(description: string, amount: number): Promise<MLPrediction> {
