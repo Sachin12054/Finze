@@ -84,8 +84,6 @@ class ReceiptScannerService {
     if (bestUrl) {
       this.baseUrl = bestUrl;
       console.log(`🔗 Scanner service initialized with: ${this.baseUrl}`);
-    } else {
-      console.warn('⚠️ No backend available - scanner will use sample data');
     }
   }
 

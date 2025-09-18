@@ -235,8 +235,6 @@ export class EnhancedFirebaseService {
       // Sort by date descending
       allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
-      console.log(`🔄 Transactions Listener: Manual=${manualTransactions.length}, Scanner=${scannerTransactions.length}, Total=${allTransactions.length}`);
-      
       callback(allTransactions);
     };
     
@@ -263,7 +261,6 @@ export class EnhancedFirebaseService {
         };
       }) as Transaction[];
       
-      console.log(`📝 Manual transactions updated: ${manualTransactions.length} items`);
       combineAndCallback();
     });
     
@@ -290,7 +287,6 @@ export class EnhancedFirebaseService {
         };
       }) as Transaction[];
       
-      console.log(`📷 Scanner transactions updated: ${scannerTransactions.length} items`);
       combineAndCallback();
     });
     
@@ -705,10 +701,6 @@ export class EnhancedFirebaseService {
       const currentMonth = new Date().getMonth();
       const currentYear = new Date().getFullYear();
       
-      console.log(`🧮 Financial Summary Debug: Current Month=${currentMonth}, Year=${currentYear}`);
-      console.log(`📊 Manual expenses count: ${expensesSnapshot.docs.length}`);
-      console.log(`📷 Scanner expenses count: ${scannerSnapshot.docs.length}`);
-      
       // Process manual expenses
       expensesSnapshot.docs.forEach((doc, index) => {
         try {
@@ -783,7 +775,6 @@ export class EnhancedFirebaseService {
           if (transactionDate.getMonth() === currentMonth && 
               transactionDate.getFullYear() === currentYear) {
             currentMonthExpenses += amount;
-            console.log(`📷 Scanner expense added to current month: ₹${amount} on ${transactionDate.toISOString()}`);
           }
         } catch (scannerError) {
           // Skip scanner transactions with errors
@@ -797,8 +788,6 @@ export class EnhancedFirebaseService {
         currentMonthIncome,
         currentMonthExpenses
       };
-      
-      console.log(`💵 Final Financial Summary:`, summary);
       
       return summary;
     } catch (error) {

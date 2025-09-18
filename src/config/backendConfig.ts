@@ -61,7 +61,6 @@ export async function findBestBackendUrl(): Promise<string | null> {
     }
   }
   
-  console.warn('⚠️ No backend connection found - using sample data');
   return null;
 }
 
