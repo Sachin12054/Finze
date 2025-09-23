@@ -1,9 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Picker } from '@react-native-picker/picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -15,45 +13,40 @@ import {
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  Modal,
   Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
 import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AddBudgetDialog from '../../src/components/AddBudgetDialog';
+import { AddRecurringDialog } from '../../src/components/AddRecurringDialog';
+import { AddSavingsGoalDialog } from '../../src/components/AddSavingsGoalDialog';
+import { RecurringTab } from '../../src/components/tabs/RecurringTab';
+import { SavingsTab } from '../../src/components/tabs/SavingsTab';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { auth, db } from '../../src/services/firebase';
+
+// Import Enhanced BudgetTab component
+import { BudgetTab } from '../../src/components/tabs/BudgetTab';
 
 // Import Enhanced Firebase Service for consistent data handling like index.tsx
 import {
   Budget,
   EnhancedFirebaseService,
   SavingsGoal as FirebaseSavingsGoal,
+  Recurrence,
   Transaction
 } from '../../src/services/enhancedFirebaseService';
 
 
 
-// Local types for recurring transactions and smart suggestions (not in enhanced service yet)
-interface RecurringTransaction {
-  id?: string;
-  title: string;
-  amount: number;
-  category: string;
-  type: 'income' | 'expense';
-  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
-  lastApplied: string;
-  nextDue: string;
-  isActive: boolean;
-}
-
+// Local types for smart suggestions (not in enhanced service yet)
 interface SavingsGoal {
   id?: string;
   name: string;
@@ -77,12 +70,6 @@ interface SmartSuggestion {
   createdAt: string;
 }
 
-const categories = [
-  'Food & Dining', 'Transportation', 'Shopping', 'Entertainment',
-  'Bills & Utilities', 'Healthcare', 'Education', 'Travel',
-  'Investment', 'Income', 'Other'
-];
-
 export default function ExploreDashboard() {
   const { isDarkTheme, toggleTheme } = useTheme();
   const [user, setUser] = useState<any>(null);
@@ -92,7 +79,7 @@ export default function ExploreDashboard() {
   // Data states - using Firebase types for consistency with index.tsx
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
+  const [recurringTransactions, setRecurringTransactions] = useState<Recurrence[]>([]);
   const [savingsGoals, setSavingsGoals] = useState<FirebaseSavingsGoal[]>([]);
   const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestion[]>([]);
   
@@ -109,32 +96,9 @@ export default function ExploreDashboard() {
   const [showAddBudget, setShowAddBudget] = useState(false);
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [showAddRecurring, setShowAddRecurring] = useState(false);
+  const [editingRecurrence, setEditingRecurrence] = useState<Recurrence | null>(null);
+  const [editingSavingsGoal, setEditingSavingsGoal] = useState<FirebaseSavingsGoal | null>(null);
   
-  // Form states
-  const [budgetForm, setBudgetForm] = useState({
-    category: '',
-    amount: '',
-    period: 'monthly' as 'weekly' | 'monthly' | 'yearly',
-    alertThreshold: 80
-  });
-  
-  const [goalForm, setGoalForm] = useState({
-    name: '',
-    targetAmount: '',
-    targetDate: '',
-    category: 'Other',
-    priority: 'medium' as 'low' | 'medium' | 'high',
-    description: ''
-  });
-  
-  const [recurringForm, setRecurringForm] = useState({
-    title: '',
-    amount: '',
-    category: '',
-    type: 'expense' as 'income' | 'expense',
-    frequency: 'monthly' as 'daily' | 'weekly' | 'monthly' | 'yearly'
-  });
-
   // Authentication and data loading
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -196,22 +160,11 @@ export default function ExploreDashboard() {
       console.error('Error setting up listeners:', error);
     }
 
-    // Recurring transactions listener (using direct Firestore)
-    const recurringRef = collection(db, `users/${userId}/recurring_expenses`);
-    const unsubRecurring = onSnapshot(
-      recurringRef, 
-      (snapshot) => {
-        const recurringData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as RecurringTransaction[];
-        setRecurringTransactions(recurringData);
-      },
-      (error) => {
-        console.error('Error fetching recurring transactions:', error);
-        setRecurringTransactions([]);
-      }
-    );
+    // Recurring transactions listener (using EnhancedFirebaseService)
+    const unsubRecurring = EnhancedFirebaseService.getRecurrenceListener((recurringData) => {
+      console.log('🔄 Explore: Received recurring data:', recurringData);
+      setRecurringTransactions(recurringData);
+    });
 
     // Smart suggestions listener (simplified to avoid index requirement)
     const suggestionsRef = collection(db, `users/${userId}/smart_suggestions`);
@@ -256,155 +209,6 @@ export default function ExploreDashboard() {
     );
   };
 
-  // Add budget function
-  const addBudget = async () => {
-    if (!user) return;
-
-    try {
-      const amount = parseFloat(budgetForm.amount);
-      if (isNaN(amount) || amount <= 0) {
-        showToast('Please enter a valid budget amount', 'error');
-        return;
-      }
-
-      if (!budgetForm.category) {
-        showToast('Please select a category', 'error');
-        return;
-      }
-
-      const budget: Omit<Budget, 'id'> = {
-        category: budgetForm.category,
-        amount,
-        spent: 0,
-        period: budgetForm.period,
-        alertThreshold: budgetForm.alertThreshold,
-        isActive: true,
-        userId: user.uid,
-        startDate: new Date().toISOString(),
-        endDate: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
-        notifications: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      await addDoc(collection(db, `users/${user.uid}/budgets`), budget);
-      
-      showToast('Budget created successfully');
-
-      setBudgetForm({
-        category: '',
-        amount: '',
-        period: 'monthly',
-        alertThreshold: 80
-      });
-      setShowAddBudget(false);
-    } catch (error) {
-      showToast('Failed to create budget', 'error');
-    }
-  };
-
-  // Add savings goal function
-  const addSavingsGoal = async () => {
-    if (!user) return;
-
-    try {
-      const targetAmount = parseFloat(goalForm.targetAmount);
-      if (isNaN(targetAmount) || targetAmount <= 0) {
-        showToast('Please enter a valid target amount', 'error');
-        return;
-      }
-
-      if (!goalForm.name.trim() || !goalForm.targetDate) {
-        showToast('Please fill in all required fields', 'error');
-        return;
-      }
-
-      const goal: Omit<SavingsGoal, 'id'> = {
-        ...goalForm,
-        targetAmount,
-        currentAmount: 0,
-        isCompleted: false
-      };
-
-      await addDoc(collection(db, `users/${user.uid}/savings_goals`), goal);
-      
-      showToast('Savings goal created successfully');
-
-      setGoalForm({
-        name: '',
-        targetAmount: '',
-        targetDate: '',
-        category: 'Other',
-        priority: 'medium',
-        description: ''
-      });
-      setShowAddGoal(false);
-    } catch (error) {
-      showToast('Failed to create savings goal', 'error');
-    }
-  };
-
-  // Add recurring transaction function
-  const addRecurringTransaction = async () => {
-    if (!user) return;
-
-    try {
-      const amount = parseFloat(recurringForm.amount);
-      if (isNaN(amount) || amount <= 0) {
-        showToast('Please enter a valid amount', 'error');
-        return;
-      }
-
-      if (!recurringForm.title.trim() || !recurringForm.category) {
-        showToast('Please fill in all required fields', 'error');
-        return;
-      }
-
-      const nextDue = new Date();
-      // Calculate next due date based on frequency
-      switch (recurringForm.frequency) {
-        case 'daily':
-          nextDue.setDate(nextDue.getDate() + 1);
-          break;
-        case 'weekly':
-          nextDue.setDate(nextDue.getDate() + 7);
-          break;
-        case 'monthly':
-          nextDue.setMonth(nextDue.getMonth() + 1);
-          break;
-        case 'yearly':
-          nextDue.setFullYear(nextDue.getFullYear() + 1);
-          break;
-      }
-
-      const recurringTransaction: Omit<RecurringTransaction, 'id'> = {
-        title: recurringForm.title,
-        amount,
-        category: recurringForm.category,
-        type: recurringForm.type,
-        frequency: recurringForm.frequency,
-        lastApplied: new Date().toISOString(),
-        nextDue: nextDue.toISOString(),
-        isActive: true
-      };
-
-      await addDoc(collection(db, `users/${user.uid}/recurring_expenses`), recurringTransaction);
-      
-      showToast('Recurring transaction created successfully');
-
-      setRecurringForm({
-        title: '',
-        amount: '',
-        category: '',
-        type: 'expense',
-        frequency: 'monthly'
-      });
-      setShowAddRecurring(false);
-    } catch (error) {
-      showToast('Failed to create recurring transaction', 'error');
-    }
-  };
-
   // Delete functions
   const deleteBudget = async (budgetId: string) => {
     if (!user) return;
@@ -419,9 +223,10 @@ export default function ExploreDashboard() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDoc(doc(db, `users/${user.uid}/budgets`, budgetId));
+              await EnhancedFirebaseService.deleteBudget(budgetId);
               showToast('Budget deleted successfully');
             } catch (error) {
+              console.error('Error deleting budget:', error);
               showToast('Failed to delete budget', 'error');
             }
           }
@@ -479,50 +284,6 @@ export default function ExploreDashboard() {
   };
 
   // Toggle recurring transaction status
-  const toggleRecurringStatus = async (recurringId: string) => {
-    if (!user) return;
-    
-    try {
-      const recurringRef = doc(db, `users/${user.uid}/recurring_expenses`, recurringId);
-      const recurring = recurringTransactions.find(r => r.id === recurringId);
-      
-      if (!recurring) return;
-      
-      await updateDoc(recurringRef, {
-        isActive: !recurring.isActive
-      });
-      
-      showToast(`Recurring transaction ${!recurring.isActive ? 'activated' : 'paused'}`);
-    } catch (error) {
-      showToast('Failed to update recurring transaction', 'error');
-    }
-  };
-
-  // Delete recurring transaction
-  const deleteRecurringTransaction = async (recurringId: string) => {
-    if (!user) return;
-    
-    Alert.alert(
-      'Delete Recurring Transaction',
-      'Are you sure you want to delete this recurring transaction?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteDoc(doc(db, `users/${user.uid}/recurring_expenses`, recurringId));
-              showToast('Recurring transaction deleted successfully');
-            } catch (error) {
-              showToast('Failed to delete recurring transaction', 'error');
-            }
-          }
-        }
-      ]
-    );
-  };
-
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 1000);
@@ -699,84 +460,259 @@ export default function ExploreDashboard() {
               </View>
             </Animated.View>
 
-            {/* Budget Overview */}
-            <View style={[styles.overviewCard, { backgroundColor: isDarkTheme ? '#1f2937' : '#ffffff' }]}>
-              <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Budget Overview</Text>
-              {budgets.slice(0, 3).map((budget) => {
-                const currentMonth = new Date().toISOString().slice(0, 7);
-                
-                // More flexible category matching (using category for Dashboard type)
-                const spent = transactions
-                  .filter(exp => {
-                    const expenseCategory = exp.category?.toLowerCase() || '';
-                    const budgetCategory = budget.category?.toLowerCase() || '';
-                    
-                    // Exact match or partial match for categories like "Food & Dining" vs "Food"
-                    const isMatch = expenseCategory === budgetCategory ||
-                                  expenseCategory.includes(budgetCategory) ||
-                                  budgetCategory.includes(expenseCategory);
-                    
-                    const isCurrentMonth = exp.date && exp.date.startsWith(currentMonth);
-                    const isExpense = exp.type === 'expense';
-                    
-                    return isMatch && isCurrentMonth && isExpense;
-                  })
-                  .reduce((sum, exp) => sum + exp.amount, 0);
-                
-                const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
-
-                return (
-                  <View key={budget.id} style={styles.budgetOverviewItem}>
-                    <View style={styles.budgetOverviewInfo}>
-                      <Text style={styles.budgetOverviewCategory}>{budget.category}</Text>
-                      <Text style={styles.budgetOverviewAmount}>
-                        ₹{spent.toFixed(0)} / ₹{budget.amount.toFixed(0)}
-                      </Text>
-                    </View>
-                    <View style={styles.budgetOverviewBar}>
-                      <View
-                        style={[
-                          styles.budgetOverviewFill,
-                          {
-                            width: `${Math.min(percentage, 100)}%`,
-                            backgroundColor: percentage > 80 ? '#ef4444' : '#10b981'
-                          }
-                        ]}
-                      />
-                    </View>
+            {/* Enhanced Budget Overview */}
+            <Animated.View entering={FadeInUp.delay(400)} style={styles.budgetOverviewSection}>
+              {/* Header with title and View All button */}
+              <View style={styles.budgetOverviewHeader}>
+                <View style={styles.budgetOverviewTitleContainer}>
+                  <LinearGradient
+                    colors={['#667eea', '#764ba2'] as const}
+                    style={styles.budgetOverviewIconContainer}
+                  >
+                    <Ionicons name="wallet-outline" size={24} color="white" />
+                  </LinearGradient>
+                  <View style={styles.budgetOverviewTitleInfo}>
+                    <Text style={[styles.budgetOverviewTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                      Budget Overview
+                    </Text>
+                    <Text style={[styles.budgetOverviewSubtitle, { color: isDarkTheme ? '#9ca3af' : '#6b7280' }]}>
+                      {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+                    </Text>
                   </View>
-                );
-              })}
-              {budgets.length === 0 && (
-                <Text style={styles.emptyStateText}>No budgets created yet</Text>
+                </View>
+                
+                <TouchableOpacity 
+                  onPress={() => setActiveTab('budgets')}
+                  style={[styles.budgetOverviewViewAllButton, { 
+                    backgroundColor: isDarkTheme ? '#374151' : '#f3f4f6',
+                    borderWidth: 1,
+                    borderColor: isDarkTheme ? '#6b7280' : '#d1d5db',
+                  }]}
+                >
+                  <Text style={[styles.budgetOverviewViewAllText, { 
+                    color: isDarkTheme ? '#e5e7eb' : '#1f2937' 
+                  }]}>
+                    View All
+                  </Text>
+                  <Ionicons 
+                    name="chevron-forward" 
+                    size={16} 
+                    color={isDarkTheme ? '#e5e7eb' : '#1f2937'} 
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {budgets.length > 0 ? (
+                <>
+                  {/* Display up to 4 budgets in a 2x2 grid layout */}
+                  <View style={styles.budgetOverviewGrid}>
+                    {budgets.slice(0, 4).map((budget, index) => {
+                    const currentMonth = new Date().toISOString().slice(0, 7);
+                    
+                    const spent = transactions
+                      .filter(exp => {
+                        const expenseCategory = exp.category?.toLowerCase() || '';
+                        const budgetCategory = budget.category?.toLowerCase() || '';
+                        
+                        const isMatch = expenseCategory === budgetCategory ||
+                                      expenseCategory.includes(budgetCategory) ||
+                                      budgetCategory.includes(expenseCategory);
+                        
+                        const isCurrentMonth = exp.date && exp.date.startsWith(currentMonth);
+                        const isExpense = exp.type === 'expense';
+                        
+                        return isMatch && isCurrentMonth && isExpense;
+                      })
+                      .reduce((sum, exp) => sum + exp.amount, 0);
+                    
+                    const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
+                    const isOverBudget = percentage > 100;
+                    const isWarning = percentage > (budget.alertThreshold || 80);
+                    
+                    // Dynamic color based on progress
+                    const progressColor = isOverBudget ? '#EF4444' : isWarning ? '#F59E0B' : '#10B981';
+                    const gradientColors = isOverBudget 
+                      ? ['#FEE2E2', '#FECACA'] as const
+                      : isWarning 
+                        ? ['#FEF3C7', '#FDE68A'] as const
+                        : ['#D1FAE5', '#A7F3D0'] as const;
+
+                    return (
+                      <Animated.View
+                        key={budget.id}
+                        entering={FadeInRight.delay(500 + index * 100)}
+                        style={[
+                          styles.budgetOverviewCard,
+                          { backgroundColor: isDarkTheme ? '#1f2937' : '#ffffff' }
+                        ]}
+                      >
+                        <LinearGradient
+                          colors={isDarkTheme 
+                            ? ['#1f2937', '#374151'] as const
+                            : gradientColors
+                          }
+                          style={styles.budgetOverviewCardGradient}
+                        >
+                          {/* Budget Category & Icon */}
+                          <View style={styles.budgetOverviewCardHeader}>
+                            <View style={[styles.budgetOverviewCategoryIcon, { backgroundColor: progressColor + '20' }]}>
+                              <Ionicons name="receipt-outline" size={16} color={progressColor} />
+                            </View>
+                            <Text style={[
+                              styles.budgetOverviewCardCategory, 
+                              { color: isDarkTheme ? '#ffffff' : '#1f2937' }
+                            ]} numberOfLines={1}>
+                              {budget.category}
+                            </Text>
+                          </View>
+
+                          {/* Progress Circle */}
+                          <View style={styles.budgetOverviewProgressContainer}>
+                            <View style={[styles.budgetOverviewProgressCircle, { borderColor: progressColor + '30' }]}>
+                              <View style={[
+                                styles.budgetOverviewProgressInnerCircle,
+                                { backgroundColor: progressColor + '20' }
+                              ]}>
+                                <Text style={[styles.budgetOverviewProgressText, { color: progressColor }]}>
+                                  {Math.round(percentage)}%
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          {/* Amount Details */}
+                          <View style={styles.budgetOverviewAmountSection}>
+                            <Text style={[
+                              styles.budgetOverviewSpentAmount, 
+                              { color: isDarkTheme ? '#e5e7eb' : '#374151' }
+                            ]}>
+                              ₹{spent.toLocaleString('en-IN')}
+                            </Text>
+                            <Text style={[
+                              styles.budgetOverviewTotalAmount, 
+                              { color: isDarkTheme ? '#9ca3af' : '#6b7280' }
+                            ]}>
+                              of ₹{budget.amount.toLocaleString('en-IN')}
+                            </Text>
+                          </View>
+
+                          {/* Status Badge */}
+                          {(isOverBudget || isWarning) && (
+                            <View style={[
+                              styles.budgetOverviewStatusBadge,
+                              { backgroundColor: progressColor }
+                            ]}>
+                              <Ionicons 
+                                name={isOverBudget ? "warning" : "alert-circle"} 
+                                size={10} 
+                                color="white" 
+                              />
+                              <Text style={styles.budgetOverviewStatusText}>
+                                {isOverBudget ? 'Over' : 'Alert'}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Progress Bar */}
+                          <View style={[
+                            styles.budgetOverviewProgressBar,
+                            { backgroundColor: isDarkTheme ? '#374151' : '#e5e7eb' }
+                          ]}>
+                            <Animated.View
+                              style={[
+                                styles.budgetOverviewProgressFill,
+                                {
+                                  width: `${Math.min(percentage, 100)}%`,
+                                  backgroundColor: progressColor
+                                }
+                              ]}
+                            />
+                          </View>
+                        </LinearGradient>
+                      </Animated.View>
+                    );
+                  })}
+                  </View>
+                </>
+              ) : (
+                <View style={styles.budgetOverviewEmptyState}>
+                  <LinearGradient
+                    colors={isDarkTheme ? ['#1f2937', '#374151'] : ['#f8fafc', '#f1f5f9']}
+                    style={styles.budgetOverviewEmptyCard}
+                  >
+                    <Ionicons 
+                      name="wallet-outline" 
+                      size={48} 
+                      color={isDarkTheme ? '#6b7280' : '#9ca3af'} 
+                    />
+                    <Text style={[
+                      styles.budgetOverviewEmptyTitle, 
+                      { color: isDarkTheme ? '#d1d5db' : '#374151' }
+                    ]}>
+                      No Budgets Yet
+                    </Text>
+                    <Text style={[
+                      styles.budgetOverviewEmptySubtitle, 
+                      { color: isDarkTheme ? '#9ca3af' : '#6b7280' }
+                    ]}>
+                      Create your first budget to start tracking spending
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setActiveTab('budgets')}
+                      style={styles.budgetOverviewEmptyButton}
+                    >
+                      <LinearGradient
+                        colors={['#667eea', '#764ba2']}
+                        style={styles.budgetOverviewEmptyButtonGradient}
+                      >
+                        <Ionicons name="add" size={16} color="white" />
+                        <Text style={styles.budgetOverviewEmptyButtonText}>Create Budget</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </LinearGradient>
+                </View>
               )}
-            </View>
+            </Animated.View>
           </Animated.View>
         )}
 
         {activeTab === 'budgets' && (
-          <BudgetsTab
+          <BudgetTab
             budgets={budgets}
             transactions={transactions}
-            onDeleteBudget={deleteBudget}
             isDarkTheme={isDarkTheme}
+            onAddBudget={() => setShowAddBudget(true)}
           />
         )}
 
         {activeTab === 'goals' && (
-          <SavingsGoalsTab
-            goals={savingsGoals}
+          <SavingsTab
+            savingsGoals={savingsGoals}
+            isDarkTheme={isDarkTheme}
+            onAddSavings={() => {
+              setEditingSavingsGoal(null);
+              setShowAddGoal(true);
+            }}
             onDeleteGoal={deleteSavingsGoal}
             onUpdateProgress={updateSavingsGoalProgress}
-            isDarkTheme={isDarkTheme}
+            onEditGoal={(goal) => {
+              setEditingSavingsGoal(goal);
+              setShowAddGoal(true);
+            }}
           />
         )}
 
         {activeTab === 'recurring' && (
           <RecurringTab
-            recurring={recurringTransactions}
-            onToggleStatus={toggleRecurringStatus}
-            onDeleteRecurring={deleteRecurringTransaction}
+            recurrences={recurringTransactions}
+            onAddRecurring={() => {
+              setEditingRecurrence(null);
+              setShowAddRecurring(true);
+            }}
+            onEditRecurring={(recurrence) => {
+              setEditingRecurrence(recurrence);
+              setShowAddRecurring(true);
+            }}
             isDarkTheme={isDarkTheme}
           />
         )}
@@ -797,200 +733,34 @@ export default function ExploreDashboard() {
         )}
       </ScrollView>
 
-      {/* Add Recurring Transaction Modal */}
-      <Modal visible={showAddRecurring} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: isDarkTheme ? '#1f2937' : '#ffffff' }]}>
-            <Text style={[styles.modalTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Add Recurring Transaction</Text>
-            
-            <TextInput
-              style={[styles.input, { backgroundColor: isDarkTheme ? '#374151' : '#f3f4f6', color: isDarkTheme ? '#ffffff' : '#1f2937' }]}
-              placeholder="Title"
-              placeholderTextColor={isDarkTheme ? "#9ca3af" : "#6b7280"}
-              value={recurringForm.title}
-              onChangeText={(text) => setRecurringForm({...recurringForm, title: text})}
-            />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Amount"
-              placeholderTextColor="#9ca3af"
-              keyboardType="numeric"
-              value={recurringForm.amount}
-              onChangeText={(text) => setRecurringForm({...recurringForm, amount: text})}
-            />
+      {/* Add Recurring Transaction Dialog */}
+      <AddRecurringDialog
+        visible={showAddRecurring}
+        onClose={() => {
+          setShowAddRecurring(false);
+          setEditingRecurrence(null);
+        }}
+        editingRecurrence={editingRecurrence}
+        isDarkTheme={isDarkTheme}
+      />
 
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={recurringForm.category}
-                style={styles.picker}
-                onValueChange={(itemValue, _itemIndex) => setRecurringForm({...recurringForm, category: itemValue as string})}
-              >
-                <Picker.Item label="Select Category" value="" />
-                {categories.map((cat) => (
-                  <Picker.Item key={cat} label={cat} value={cat} />
-                ))}
-              </Picker>
-            </View>
+      {/* Add Budget Dialog */}
+      <AddBudgetDialog
+        visible={showAddBudget}
+        onClose={() => setShowAddBudget(false)}
+        isDarkTheme={isDarkTheme}
+      />
 
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={recurringForm.type}
-                style={styles.picker}
-                onValueChange={(itemValue, _itemIndex) => setRecurringForm({...recurringForm, type: itemValue as 'income' | 'expense'})}
-              >
-                <Picker.Item label="Expense" value="expense" />
-                <Picker.Item label="Income" value="income" />
-              </Picker>
-            </View>
-
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={recurringForm.frequency}
-                style={styles.picker}
-                onValueChange={(itemValue, _itemIndex) => setRecurringForm({...recurringForm, frequency: itemValue as 'daily' | 'weekly' | 'monthly' | 'yearly'})}
-              >
-                <Picker.Item label="Daily" value="daily" />
-                <Picker.Item label="Weekly" value="weekly" />
-                <Picker.Item label="Monthly" value="monthly" />
-                <Picker.Item label="Yearly" value="yearly" />
-              </Picker>
-            </View>
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowAddRecurring(false)}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={addRecurringTransaction}
-              >
-                <Text style={styles.buttonText}>Add</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Add Budget Modal */}
-      <Modal visible={showAddBudget} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Create Budget</Text>
-            
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={budgetForm.category}
-                style={styles.picker}
-                onValueChange={(itemValue, _itemIndex) => setBudgetForm({...budgetForm, category: itemValue as string})}
-              >
-                <Picker.Item label="Select Category" value="" />
-                {categories.map((cat) => (
-                  <Picker.Item key={cat} label={cat} value={cat} />
-                ))}
-              </Picker>
-            </View>
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Budget Amount"
-              placeholderTextColor="#9ca3af"
-              keyboardType="numeric"
-              value={budgetForm.amount}
-              onChangeText={(text) => setBudgetForm({...budgetForm, amount: text})}
-            />
-
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={budgetForm.period}
-                style={styles.picker}
-                onValueChange={(itemValue, _itemIndex) => setBudgetForm({...budgetForm, period: itemValue as 'weekly' | 'monthly' | 'yearly'})}
-              >
-                <Picker.Item label="Weekly" value="weekly" />
-                <Picker.Item label="Monthly" value="monthly" />
-                <Picker.Item label="Yearly" value="yearly" />
-              </Picker>
-            </View>
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowAddBudget(false)}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={addBudget}
-              >
-                <Text style={styles.buttonText}>Create</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Add Goal Modal */}
-      <Modal visible={showAddGoal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Create Savings Goal</Text>
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Goal Name"
-              placeholderTextColor="#9ca3af"
-              value={goalForm.name}
-              onChangeText={(text) => setGoalForm({...goalForm, name: text})}
-            />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Target Amount"
-              placeholderTextColor="#9ca3af"
-              keyboardType="numeric"
-              value={goalForm.targetAmount}
-              onChangeText={(text) => setGoalForm({...goalForm, targetAmount: text})}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Target Date (YYYY-MM-DD)"
-              placeholderTextColor="#9ca3af"
-              value={goalForm.targetDate}
-              onChangeText={(text) => setGoalForm({...goalForm, targetDate: text})}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Description (optional)"
-              placeholderTextColor="#9ca3af"
-              value={goalForm.description}
-              onChangeText={(text) => setGoalForm({...goalForm, description: text})}
-              multiline
-              numberOfLines={3}
-            />
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowAddGoal(false)}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={addSavingsGoal}
-              >
-                <Text style={styles.buttonText}>Create</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Add Savings Goal Dialog */}
+      <AddSavingsGoalDialog
+        visible={showAddGoal}
+        onClose={() => {
+          setShowAddGoal(false);
+          setEditingSavingsGoal(null);
+        }}
+        editingGoal={editingSavingsGoal}
+        isDarkTheme={isDarkTheme}
+      />
     </View>
   );
 }
@@ -1013,328 +783,7 @@ function QuickActionCard({ title, icon, color, onPress }: {
   );
 }
 
-// Component: Budgets Tab
-function BudgetsTab({ budgets, transactions, onDeleteBudget, isDarkTheme }: {
-  budgets: Budget[];
-  transactions: Transaction[];
-  onDeleteBudget: (id: string) => void;
-  isDarkTheme: boolean;
-}) {
-  return (
-    <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
-      <View style={styles.sectionTitleRow}>
-        <Ionicons name="wallet-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
-        <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Budget Management</Text>
-      </View>
-      
-      {budgets.map((budget) => {
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        
-        // More flexible category matching
-        const spent = transactions
-          .filter((exp: Transaction) => {
-            const expenseCategory = exp.category?.toLowerCase() || '';
-            const budgetCategory = budget.category?.toLowerCase() || '';
-            
-            // Exact match or partial match for categories like "Food & Dining" vs "Food"
-            const isMatch = expenseCategory === budgetCategory ||
-                          expenseCategory.includes(budgetCategory) ||
-                          budgetCategory.includes(expenseCategory);
-            
-            const isCurrentMonth = exp.date.startsWith(currentMonth);
-            const isExpense = exp.type === 'expense';
-            
-            return isMatch && isCurrentMonth && isExpense;
-          })
-          .reduce((sum: number, exp: Transaction) => sum + exp.amount, 0);
-        
-        const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
-        const isOverBudget = percentage > 100;
-        const isWarning = percentage > (budget.alertThreshold || 80);
-
-        return (
-          <LinearGradient
-            key={budget.id}
-            colors={['#1f2937', '#374151']}
-            style={styles.budgetCard}
-          >
-            <View style={styles.budgetHeader}>
-              <Text style={styles.budgetCategory}>{budget.category}</Text>
-              <TouchableOpacity
-                onPress={() => onDeleteBudget(budget.id!)}
-                style={styles.deleteButton}
-              >
-                <Ionicons name="trash-outline" size={16} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={[
-              styles.budgetPercentageText,
-              { color: isOverBudget ? '#ef4444' : isWarning ? '#f59e0b' : '#10b981' }
-            ]}>
-              {percentage.toFixed(1)}% used
-            </Text>
-            
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${Math.min(percentage, 100)}%`,
-                    backgroundColor: isOverBudget ? '#ef4444' : isWarning ? '#f59e0b' : '#10b981'
-                  }
-                ]}
-              />
-            </View>
-            
-            <Text style={styles.budgetAmount}>
-              ₹{spent.toFixed(2)} / ₹{budget.amount.toFixed(2)}
-            </Text>
-            <Text style={styles.budgetPeriod}>Period: {budget.period}</Text>
-          </LinearGradient>
-        );
-      })}
-      
-      {budgets.length === 0 && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No budgets created yet</Text>
-          <Text style={styles.emptyStateSubtext}>Create your first budget to start tracking spending</Text>
-        </View>
-      )}
-    </Animated.View>
-  );
-}
-
 // Component: Savings Goals Tab
-function SavingsGoalsTab({ goals, onDeleteGoal, onUpdateProgress, isDarkTheme }: {
-  goals: SavingsGoal[];
-  onDeleteGoal: (id: string) => void;
-  onUpdateProgress: (goalId: string, additionalAmount: number) => void;
-  isDarkTheme: boolean;
-}) {
-  return (
-    <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
-      <View style={styles.sectionTitleRow}>
-        <Ionicons name="flag-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
-        <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Savings Goals</Text>
-      </View>
-      
-      {goals.map((goal) => {
-        const percentage = (goal.currentAmount / goal.targetAmount) * 100;
-        const isCompleted = percentage >= 100;
-        const remainingDays = Math.ceil((new Date(goal.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-
-        return (
-          <LinearGradient
-            key={goal.id}
-            colors={['#1f2937', '#374151']}
-            style={styles.goalCard}
-          >
-            <View style={styles.goalHeader}>
-              <Text style={styles.goalName}>{goal.name}</Text>
-              <TouchableOpacity
-                onPress={() => onDeleteGoal(goal.id!)}
-                style={styles.deleteButton}
-              >
-                <Ionicons name="trash-outline" size={16} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={[
-              styles.goalPercentage,
-              { color: isCompleted ? '#10b981' : '#06b6d4' }
-            ]}>
-              {percentage.toFixed(1)}% complete
-            </Text>
-            
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${Math.min(percentage, 100)}%`,
-                    backgroundColor: isCompleted ? '#10b981' : '#06b6d4'
-                  }
-                ]}
-              />
-            </View>
-            
-            <Text style={styles.goalAmount}>
-              ₹{goal.currentAmount.toFixed(2)} / ₹{goal.targetAmount.toFixed(2)}
-            </Text>
-
-            {!isCompleted && (
-              <View style={styles.goalActions}>
-                <TouchableOpacity
-                  style={[styles.goalActionButton, { backgroundColor: '#10b981' }]}
-                  onPress={() => {
-                    Alert.prompt(
-                      'Add Money',
-                      'Enter amount to add to this goal:',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Add',
-                          onPress: (amount: string | undefined) => {
-                            const numAmount = parseFloat(amount || '0');
-                            if (numAmount > 0) {
-                              onUpdateProgress(goal.id!, numAmount);
-                            }
-                          }
-                        }
-                      ],
-                      'plain-text',
-                      '',
-                      'numeric'
-                    );
-                  }}
-                >
-                  <View style={styles.goalActionRow}>
-                    <Ionicons name="add-circle" size={16} color="#ffffff" />
-                    <Text style={styles.goalActionText}>Add Money</Text>
-                  </View>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.goalActionButton, { backgroundColor: '#6366f1' }]}
-                  onPress={() => {
-                    Alert.alert(
-                      'Complete Goal',
-                      'Mark this goal as completed?',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Complete',
-                          onPress: () => {
-                            const remainingAmount = goal.targetAmount - goal.currentAmount;
-                            onUpdateProgress(goal.id!, remainingAmount);
-                          }
-                        }
-                      ]
-                    );
-                  }}
-                >
-                  <Text style={styles.goalActionText}>✅ Complete</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            <Text style={styles.goalDays}>
-              {remainingDays > 0 ? `${remainingDays} days remaining` : 'Goal deadline passed'}
-            </Text>
-            
-            {goal.description && (
-              <Text style={styles.goalDescription}>{goal.description}</Text>
-            )}
-
-            <View style={styles.goalFooter}>
-              <Text style={[
-                styles.priorityBadge,
-                { backgroundColor:
-                  goal.priority === 'high' ? '#ef4444' :
-                  goal.priority === 'medium' ? '#f59e0b' : '#10b981'
-                }
-              ]}>
-                {goal.priority.toUpperCase()}
-              </Text>
-            </View>
-          </LinearGradient>
-        );
-      })}
-      
-      {goals.length === 0 && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No savings goals created yet</Text>
-          <Text style={styles.emptyStateSubtext}>Set your first goal to start saving</Text>
-        </View>
-      )}
-    </Animated.View>
-  );
-}
-
-// Component: Recurring Tab
-function RecurringTab({ recurring, onToggleStatus, onDeleteRecurring, isDarkTheme }: {
-  recurring: RecurringTransaction[];
-  onToggleStatus: (recurringId: string) => void;
-  onDeleteRecurring: (recurringId: string) => void;
-  isDarkTheme: boolean;
-}) {
-  return (
-    <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
-      <View style={styles.sectionTitleRow}>
-        <Ionicons name="repeat-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
-        <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Recurring Transactions</Text>
-      </View>
-      
-      {recurring.map((item) => (
-        <LinearGradient
-          key={item.id}
-          colors={['#1f2937', '#374151']}
-          style={styles.recurringCard}
-        >
-          <View style={styles.recurringHeader}>
-            <Text style={styles.recurringTitle}>{item.title}</Text>
-            <View style={[
-              styles.statusBadge,
-              { backgroundColor: item.isActive ? '#10b981' : '#ef4444' }
-            ]}>
-              <Text style={styles.statusText}>
-                {item.isActive ? 'Active' : 'Paused'}
-              </Text>
-            </View>
-          </View>
-          
-          <Text style={styles.recurringAmount}>
-            ₹{item.amount.toFixed(2)} • {item.frequency}
-          </Text>
-          <Text style={styles.recurringCategory}>{item.category}</Text>
-          <Text style={styles.recurringNext}>
-            Next due: {new Date(item.nextDue).toLocaleDateString()}
-          </Text>
-
-          <View style={styles.recurringActions}>
-            <TouchableOpacity
-              style={[
-                styles.recurringActionButton,
-                { backgroundColor: item.isActive ? '#f59e0b' : '#10b981' }
-              ]}
-              onPress={() => onToggleStatus(item.id!)}
-            >
-              <View style={styles.recurringActionRow}>
-                <Ionicons 
-                  name={item.isActive ? 'pause-outline' : 'play-outline'} 
-                  size={14} 
-                  color="white" 
-                />
-                <Text style={styles.recurringActionText}>
-                  {item.isActive ? 'Pause' : 'Resume'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.recurringActionButton, { backgroundColor: '#ef4444' }]}
-              onPress={() => onDeleteRecurring(item.id!)}
-            >
-              <View style={styles.recurringActionRow}>
-                <Ionicons name="trash-outline" size={14} color="white" />
-                <Text style={styles.recurringActionText}>Delete</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </LinearGradient>
-      ))}
-      
-      {recurring.length === 0 && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No recurring transactions set up</Text>
-          <Text style={styles.emptyStateSubtext}>Add recurring transactions to automate your finances</Text>
-        </View>
-      )}
-    </Animated.View>
-  );
-}
-
 // Component: Scanner History Tab
 function ScannerHistoryTab({ isDarkTheme }: {
   isDarkTheme: boolean;
@@ -1926,6 +1375,207 @@ const styles = StyleSheet.create({
   budgetOverviewFill: {
     height: '100%',
     borderRadius: 3,
+  },
+  // Enhanced Budget Overview Styles
+  budgetOverviewSection: {
+    marginBottom: 24,
+    paddingHorizontal: 20,
+  },
+  budgetOverviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  budgetOverviewTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  budgetOverviewTitleInfo: {
+    flex: 1,
+  },
+  budgetOverviewIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  budgetOverviewTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  budgetOverviewSubtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  budgetOverviewViewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 4,
+    minWidth: 90,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  budgetOverviewViewAllText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  budgetOverviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+    paddingHorizontal: 4,
+  },
+  budgetOverviewCard: {
+    width: '47%', // Slightly less than 48% to ensure proper spacing
+    minHeight: 160,
+    maxHeight: 180,
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  budgetOverviewCardGradient: {
+    padding: 16,
+    flex: 1, // Fill available card height
+    justifyContent: 'space-between', // Distribute content evenly
+  },
+  budgetOverviewCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  budgetOverviewCategoryIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  budgetOverviewCardCategory: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  budgetOverviewProgressContainer: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  budgetOverviewProgressCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  budgetOverviewProgressInnerCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  budgetOverviewProgressText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  budgetOverviewAmountSection: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  budgetOverviewSpentAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  budgetOverviewTotalAmount: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  budgetOverviewStatusBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 3,
+  },
+  budgetOverviewStatusText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: 'white',
+  },
+  budgetOverviewProgressBar: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  budgetOverviewProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  budgetOverviewEmptyState: {
+    alignItems: 'center',
+  },
+  budgetOverviewEmptyCard: {
+    width: '100%',
+    padding: 32,
+    borderRadius: 20,
+    alignItems: 'center',
+  },
+  budgetOverviewEmptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  budgetOverviewEmptySubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  budgetOverviewEmptyButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  budgetOverviewEmptyButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  budgetOverviewEmptyButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
   },
   budgetCard: {
     borderRadius: 16,

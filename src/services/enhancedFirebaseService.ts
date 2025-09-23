@@ -2,6 +2,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -137,6 +138,18 @@ export interface AIInsight {
 }
 
 export class EnhancedFirebaseService {
+  private static lastLogTime: number = 0;
+  private static readonly LOG_DEBOUNCE_INTERVAL = 2000; // 2 seconds
+  
+  // Helper method to prevent log spam
+  private static shouldLog(): boolean {
+    const now = Date.now();
+    if (now - this.lastLogTime > this.LOG_DEBOUNCE_INTERVAL) {
+      this.lastLogTime = now;
+      return true;
+    }
+    return false;
+  }
   
   // User Profile Management
   static async createUserProfile(profile: Omit<UserProfile, 'uid' | 'createdAt' | 'updatedAt'>): Promise<void> {
@@ -230,12 +243,103 @@ export class EnhancedFirebaseService {
     let unsubscribeScanner: (() => void) | null = null;
     
     const combineAndCallback = () => {
-      // Combine both manual and scanner transactions
-      const allTransactions = [...manualTransactions, ...scannerTransactions];
-      // Sort by date descending
-      allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
       
-      callback(allTransactions);
+      // Combine both manual and scanner transactions
+      let allTransactions = [...manualTransactions, ...scannerTransactions];
+      if (this.shouldLog()) {
+        console.log('Total combined transactions before dedup:', allTransactions.length);
+      }
+      
+      // Remove duplicates based on amount, date, and similar titles
+      const uniqueTransactions: Transaction[] = [];
+      
+      for (const transaction of allTransactions) {
+        // Check if this transaction is a duplicate of any already added
+        const isDuplicate = uniqueTransactions.some(existing => {
+          // Check for potential duplicates: same amount, same date, similar title
+          const isSameAmount = Math.abs(existing.amount - transaction.amount) < 0.01;
+          const isSameDate = new Date(existing.date).toDateString() === new Date(transaction.date).toDateString();
+          
+          if (!isSameAmount || !isSameDate) return false;
+          
+          // Clean titles for comparison
+          const cleanTitle1 = transaction.title.toLowerCase()
+            .replace(/receipt\s+from\s+/g, '')
+            .replace(/extracted\s+text\s*/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          const cleanTitle2 = existing.title.toLowerCase()
+            .replace(/receipt\s+from\s+/g, '')
+            .replace(/extracted\s+text\s*/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          
+          // Check if titles are similar (at least 70% match or contain each other)
+          const isSimilarTitle = cleanTitle1 === cleanTitle2 || 
+                                cleanTitle1.includes(cleanTitle2) || 
+                                cleanTitle2.includes(cleanTitle1) ||
+                                calculateSimilarity(cleanTitle1, cleanTitle2) > 0.7;
+          
+          return isSimilarTitle;
+        });
+        
+        if (!isDuplicate) {
+          uniqueTransactions.push(transaction);
+        } else {
+          if (this.shouldLog()) {
+            console.log('Filtered out duplicate transaction:', transaction.title, transaction.amount);
+          }
+        }
+      }
+      
+
+      
+      // Helper function to calculate string similarity
+      function calculateSimilarity(str1: string, str2: string): number {
+        const longer = str1.length > str2.length ? str1 : str2;
+        const shorter = str1.length > str2.length ? str2 : str1;
+        
+        if (longer.length === 0) return 1.0;
+        
+        const editDistance = levenshteinDistance(longer, shorter);
+        return (longer.length - editDistance) / longer.length;
+      }
+      
+      // Helper function to calculate Levenshtein distance
+      function levenshteinDistance(str1: string, str2: string): number {
+        const matrix = [];
+        
+        for (let i = 0; i <= str2.length; i++) {
+          matrix[i] = [i];
+        }
+        
+        for (let j = 0; j <= str1.length; j++) {
+          matrix[0][j] = j;
+        }
+        
+        for (let i = 1; i <= str2.length; i++) {
+          for (let j = 1; j <= str1.length; j++) {
+            if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+              matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+              matrix[i][j] = Math.min(
+                matrix[i - 1][j - 1] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j] + 1
+              );
+            }
+          }
+        }
+        
+        return matrix[str2.length][str1.length];
+      }
+      
+      // Sort by date descending (most recent first)
+      uniqueTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      
+
+      callback(uniqueTransactions);
     };
     
     // Listen to manual expenses
@@ -243,8 +347,10 @@ export class EnhancedFirebaseService {
     const manualQuery = query(userExpensesRef, orderBy('created_at', 'desc'));
     
     unsubscribeManual = onSnapshot(manualQuery, (snapshot) => {
+      console.log('Manual expenses snapshot received:', snapshot.docs.length, 'documents');
       manualTransactions = snapshot.docs.map(doc => {
         const data = doc.data();
+        console.log('Processing manual expense:', doc.id, data);
         return {
           id: doc.id,
           userId: data.user_id,
@@ -261,6 +367,9 @@ export class EnhancedFirebaseService {
         };
       }) as Transaction[];
       
+      if (this.shouldLog()) {
+        console.log('Total manual transactions:', manualTransactions.length);
+      }
       combineAndCallback();
     });
     
@@ -269,24 +378,62 @@ export class EnhancedFirebaseService {
     const scannerQuery = query(scannerExpensesRef, orderBy('createdAt', 'desc'));
     
     unsubscribeScanner = onSnapshot(scannerQuery, (snapshot) => {
+      if (this.shouldLog()) {
+        console.log('Scanner expenses snapshot received:', snapshot.docs.length, 'documents');
+      }
       scannerTransactions = snapshot.docs.map(doc => {
         const data = doc.data();
-        return {
+        // Only log individual processing on first load or significant changes
+        if (this.shouldLog()) {
+          console.log('Processing scanner expense:', doc.id, data);
+        }
+        
+        // Clean up the merchant name to remove redundant "Receipt from" prefix and extracted text
+        let cleanTitle = data.merchantName || 'Receipt Transaction';
+        
+        // Remove common prefixes and clean up the title
+        if (cleanTitle.toLowerCase().startsWith('receipt from ')) {
+          cleanTitle = cleanTitle.substring(13); // Remove "Receipt from " prefix
+        }
+        
+        // Remove any extracted text patterns and extra spaces
+        cleanTitle = cleanTitle
+          .replace(/extracted text:?/gi, '')
+          .replace(/receipt:?/gi, '')
+          .replace(/transaction:?/gi, '')
+          .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+          .trim();
+        
+        // Ensure we have a valid title
+        if (!cleanTitle || cleanTitle.length < 2) {
+          cleanTitle = 'Receipt Transaction';
+        }
+        
+        const transaction = {
           id: `scanner_${doc.id}`,
           userId: data.userId,
-          title: data.merchantName || 'Receipt Transaction',
+          title: cleanTitle,
           amount: data.totalAmount,
-          category: data.category,
+          category: data.category || 'General',
           type: 'expense' as 'expense',
           source: 'OCR' as 'OCR',
-          description: `Scanner transaction from ${data.merchantName}`,
-          date: data.date,
+          description: `Scanned receipt transaction`,
+          date: data.createdAt ? data.createdAt.split('T')[0] : new Date().toISOString().split('T')[0], // Use scan date for UI display
           paymentMethod: 'Unknown',
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
         };
+        
+        // Only log conversion details on first load
+        if (this.shouldLog()) {
+          console.log('Converted scanner expense to transaction:', transaction);
+        }
+        return transaction;
       }) as Transaction[];
       
+      if (this.shouldLog()) {
+        console.log('Total scanner transactions:', scannerTransactions.length);
+      }
       combineAndCallback();
     });
     
@@ -318,12 +465,41 @@ export class EnhancedFirebaseService {
     
     const budgetsRef = collection(db, `users/${auth.currentUser.uid}/budget`);
     
-    return onSnapshot(budgetsRef, (snapshot) => {
-      const budgets: Budget[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Budget[];
-      callback(budgets);
+    return onSnapshot(budgetsRef, 
+      (snapshot) => {
+        const budgets: Budget[] = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data
+          };
+        }) as Budget[];
+        callback(budgets);
+      },
+      (error) => {
+        console.error('❌ Budget listener error:', error);
+        // Return empty array on error instead of throwing
+        callback([]);
+      }
+    );
+  }
+
+  // Delete budget
+  static async deleteBudget(budgetId: string): Promise<void> {
+    if (!auth.currentUser) throw new Error('No authenticated user');
+    
+    const budgetRef = doc(db, `users/${auth.currentUser.uid}/budget`, budgetId);
+    await deleteDoc(budgetRef);
+  }
+
+  // Update budget
+  static async updateBudget(budgetId: string, updates: Partial<Budget>): Promise<void> {
+    if (!auth.currentUser) throw new Error('No authenticated user');
+    
+    const budgetRef = doc(db, `users/${auth.currentUser.uid}/budget`, budgetId);
+    await updateDoc(budgetRef, {
+      ...updates,
+      updatedAt: new Date().toISOString(),
     });
   }
 
@@ -349,13 +525,44 @@ export class EnhancedFirebaseService {
     const goalsRef = collection(db, `users/${auth.currentUser.uid}/setgoal`);
     const q = query(goalsRef, where('isCompleted', '==', false));
     
-    return onSnapshot(q, (snapshot) => {
-      const goals: SavingsGoal[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as SavingsGoal[];
-      callback(goals);
-    });
+    return onSnapshot(q, 
+      (snapshot) => {
+        const goals: SavingsGoal[] = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data
+          };
+        }) as SavingsGoal[];
+        callback(goals);
+      },
+      (error) => {
+        console.error('❌ Savings goals listener error:', error);
+        // Return empty array on error instead of throwing
+        callback([]);
+      }
+    );
+  }
+
+  static async updateSavingsGoal(goalId: string, updates: Partial<Omit<SavingsGoal, 'id' | 'userId' | 'createdAt'>>): Promise<void> {
+    if (!auth.currentUser) throw new Error('No authenticated user');
+    
+    const goalRef = doc(db, `users/${auth.currentUser.uid}/setgoal`, goalId);
+    const updateData = {
+      ...updates,
+      updatedAt: new Date().toISOString()
+    };
+    
+    await updateDoc(goalRef, updateData);
+    console.log('✅ Savings goal updated successfully:', goalId);
+  }
+
+  static async deleteSavingsGoal(goalId: string): Promise<void> {
+    if (!auth.currentUser) throw new Error('No authenticated user');
+    
+    const goalRef = doc(db, `users/${auth.currentUser.uid}/setgoal`, goalId);
+    await deleteDoc(goalRef);
+    console.log('✅ Savings goal deleted successfully:', goalId);
   }
 
   // Recurrence Management
@@ -378,15 +585,46 @@ export class EnhancedFirebaseService {
     if (!auth.currentUser) throw new Error('No authenticated user');
     
     const recurrenceRef = collection(db, `users/${auth.currentUser.uid}/recurrence`);
-    const q = query(recurrenceRef, where('isActive', '==', true));
+    const q = query(recurrenceRef, orderBy('createdAt', 'desc'));
     
-    return onSnapshot(q, (snapshot) => {
-      const recurrences: Recurrence[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Recurrence[];
-      callback(recurrences);
+    return onSnapshot(q, 
+      (snapshot) => {
+        console.log('🔄 Recurrence listener: Received snapshot with', snapshot.docs.length, 'documents');
+        const recurrences: Recurrence[] = snapshot.docs.map(doc => {
+          const data = doc.data();
+          console.log('🔄 Recurrence data:', data);
+          return {
+            id: doc.id,
+            ...data
+          };
+        }) as Recurrence[];
+        console.log('🔄 Processed recurrences:', recurrences);
+        callback(recurrences);
+      },
+      (error) => {
+        console.error('❌ Recurrence listener error:', error);
+        console.error('❌ Full error details:', JSON.stringify(error, null, 2));
+        // Return empty array on error instead of throwing
+        callback([]);
+      }
+    );
+  }
+
+  static async updateRecurrence(id: string, updates: Partial<Omit<Recurrence, 'id' | 'userId' | 'createdAt'>>): Promise<void> {
+    if (!auth.currentUser) throw new Error('No authenticated user');
+    
+    const recurrenceRef = doc(db, `users/${auth.currentUser.uid}/recurrence`, id);
+    await updateDoc(recurrenceRef, {
+      ...updates,
+      updatedAt: new Date().toISOString(),
     });
+  }
+
+  static async deleteRecurrence(id: string): Promise<void> {
+    if (!auth.currentUser) throw new Error('No authenticated user');
+    
+    const recurrenceRef = doc(db, `users/${auth.currentUser.uid}/recurrence`, id);
+    await deleteDoc(recurrenceRef);
   }
 
   // AI Insights Management
@@ -521,94 +759,74 @@ export class EnhancedFirebaseService {
   static async getTransactionsByDateRange(startDate: string, endDate: string): Promise<Transaction[]> {
     if (!auth.currentUser) throw new Error('No authenticated user');
     
-    console.log('EnhancedFirebaseService: getTransactionsByDateRange called with:', startDate, endDate);
-    console.log('EnhancedFirebaseService: User ID:', auth.currentUser.uid);
-    
     try {
-      // Convert dates to just date part for consistent comparison
+      // Directly fetch fresh data instead of using listener
+      const manualRef = collection(db, `users/${auth.currentUser.uid}/expenses`);
+      const scannerRef = collection(db, `users/${auth.currentUser.uid}/scanner_expenses`);
+      
+      const [manualSnapshot, scannerSnapshot] = await Promise.all([
+        getDocs(manualRef),
+        getDocs(scannerRef)
+      ]);
+
+      // Process manual transactions (match listener format)
+      const manualTransactions: Transaction[] = manualSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          userId: data.user_id || auth.currentUser.uid,
+          title: data.title || 'Transaction',
+          amount: data.amount || 0,
+          category: data.category || 'Other',
+          type: data.type || 'expense',
+          source: data.source || 'Manual',
+          description: data.description || '',
+          date: data.date || data.created_at || new Date().toISOString(),
+          paymentMethod: data.payment_method || 'Unknown',
+          createdAt: data.created_at || new Date().toISOString(),
+          updatedAt: data.updated_at || new Date().toISOString(),
+        } as Transaction;
+      });
+
+      // Process scanner expenses
+      const scannerTransactions: Transaction[] = scannerSnapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: `scanner_${doc.id}`,
+          title: data.merchantName || 'Scanned Receipt',
+          description: 'Scanned receipt transaction',
+          amount: data.totalAmount || 0,
+          type: 'expense' as const,
+          category: data.category || data.extractedCategory || 'Other',
+          date: data.date || new Date().toISOString().split('T')[0],
+          paymentMethod: 'Unknown',
+          userId: auth.currentUser.uid,
+          createdAt: data.createdAt || new Date().toISOString(),
+          updatedAt: data.updatedAt || new Date().toISOString(),
+          source: 'OCR'
+        } as Transaction;
+      });
+
+      // Combine all transactions
+      const allTransactions = [...manualTransactions, ...scannerTransactions];
+
+      // Filter by date range
       const startDateOnly = startDate.split('T')[0];
       const endDateOnly = endDate.split('T')[0];
       
-      console.log('EnhancedFirebaseService: Using date range:', startDateOnly, 'to', endDateOnly);
-      
-      // Get manual transactions from expenses collection
-      const expensesRef = collection(db, `users/${auth.currentUser.uid}/expenses`);
-      const manualQuery = query(
-        expensesRef,
-        orderBy('date', 'desc')
-      );
-      
-      // Get scanner transactions
-      const scannerRef = collection(db, `users/${auth.currentUser.uid}/scanner_expenses`);
-      const scannerQuery = query(
-        scannerRef,
-        orderBy('date', 'desc')
-      );
-      
-      console.log('EnhancedFirebaseService: Executing queries...');
-      
-      // Execute both queries
-      const [expensesSnapshot, scannerSnapshot] = await Promise.all([
-        getDocs(manualQuery),
-        getDocs(scannerQuery)
-      ]);
-      
-      console.log('EnhancedFirebaseService: Manual expenses found:', expensesSnapshot.docs.length);
-      console.log('EnhancedFirebaseService: Scanner transactions found:', scannerSnapshot.docs.length);
-      
-      // Combine and normalize the results, then filter by date client-side
-      const manualTransactions = expensesSnapshot.docs
-        .map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            source: 'Manual',
-            ...data
-          } as Transaction;
-        })
-        .filter(transaction => {
-          const transactionDate = transaction.date.split('T')[0];
-          return transactionDate >= startDateOnly && transactionDate <= endDateOnly;
-        });
-      
-      const scannerTransactions = scannerSnapshot.docs
-        .map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            source: 'OCR',
-            ...data
-          } as Transaction;
-        })
-        .filter(transaction => {
-          const transactionDate = transaction.date.split('T')[0];
-          return transactionDate >= startDateOnly && transactionDate <= endDateOnly;
-        });
-      
-      console.log('EnhancedFirebaseService: Date range filtering complete');
-      console.log('EnhancedFirebaseService: Filtered manual transactions:', manualTransactions.length);
-      console.log('EnhancedFirebaseService: Filtered scanner transactions:', scannerTransactions.length);
-      
-      // Log sample data for debugging
-      if (manualTransactions.length > 0) {
-        console.log('EnhancedFirebaseService: Sample manual transaction:', JSON.stringify(manualTransactions[0], null, 2));
+      const filteredTransactions = allTransactions.filter(transaction => {
+        const transactionDateOnly = transaction.date.split('T')[0];
+        return transactionDateOnly >= startDateOnly && transactionDateOnly <= endDateOnly;
+      });
+
+      // Only log if there's an issue (for debugging)
+      if (manualTransactions.length === 0 && scannerTransactions.length > 0) {
+        console.log('⚠️ Calendar: No manual transactions found, only scanner transactions');
       }
-      if (scannerTransactions.length > 0) {
-        console.log('EnhancedFirebaseService: Sample scanner transaction:', JSON.stringify(scannerTransactions[0], null, 2));
-      }
-      
-      console.log('EnhancedFirebaseService: Manual transactions data:', manualTransactions);
-      console.log('EnhancedFirebaseService: Scanner transactions data:', scannerTransactions);
-      
-      // Combine and sort by date
-      const allTransactions = [...manualTransactions, ...scannerTransactions];
-      allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      
-      console.log('EnhancedFirebaseService: Total combined transactions:', allTransactions.length);
-      
-      return allTransactions;
-    } catch (error) {
-      console.error('Error fetching transactions by date range:', error);
+
+      return filteredTransactions;
+    } catch (error: any) {
+      console.error('Error in getTransactionsByDateRange:', error);
       throw error;
     }
   }
@@ -654,7 +872,7 @@ export class EnhancedFirebaseService {
   static async getAllBudgets(): Promise<Budget[]> {
     if (!auth.currentUser) throw new Error('No authenticated user');
     
-    const budgetsRef = collection(db, `users/${auth.currentUser.uid}/budgets`);
+    const budgetsRef = collection(db, `users/${auth.currentUser.uid}/budget`);
     const snapshot = await getDocs(budgetsRef);
     
     return snapshot.docs.map(doc => ({
@@ -740,7 +958,6 @@ export class EnhancedFirebaseService {
             if (transactionDate.getMonth() === currentMonth && 
                 transactionDate.getFullYear() === currentYear) {
               currentMonthExpenses += amount;
-              console.log(`💰 Manual expense added to current month: ₹${amount} on ${transactionDate.toISOString()}`);
             }
           }
         } catch (transactionError) {
@@ -755,14 +972,26 @@ export class EnhancedFirebaseService {
           
           const amount = Number(scannerData.totalAmount) || 0;
           
-          // Handle scanner date
+          // Handle scanner date - use the same logic as in getTransactionsListener
           let transactionDate: Date;
           
           try {
-            if (typeof scannerData.date === 'string') {
+            // For scanner transactions, use createdAt (when scanned) instead of receipt date
+            // This matches the logic in getTransactionsListener
+            if (scannerData.createdAt) {
+              if (typeof scannerData.createdAt === 'string') {
+                transactionDate = new Date(scannerData.createdAt);
+              } else if (scannerData.createdAt.toDate) {
+                // Firestore timestamp
+                transactionDate = scannerData.createdAt.toDate();
+              } else {
+                transactionDate = new Date(scannerData.createdAt);
+              }
+            } else if (typeof scannerData.date === 'string') {
               transactionDate = new Date(scannerData.date);
-            } else if (scannerData.createdAt) {
-              transactionDate = new Date(scannerData.createdAt);
+            } else if (scannerData.date && typeof scannerData.date.toDate === 'function') {
+              // Firestore Timestamp
+              transactionDate = scannerData.date.toDate();
             } else {
               transactionDate = new Date();
             }
@@ -788,6 +1017,8 @@ export class EnhancedFirebaseService {
         currentMonthIncome,
         currentMonthExpenses
       };
+      
+
       
       return summary;
     } catch (error) {
@@ -815,6 +1046,15 @@ export class EnhancedFirebaseService {
     
     const scannerRef = collection(db, `users/${auth.currentUser.uid}/scanner_expenses`);
     const docRef = await addDoc(scannerRef, newScannerExpense);
+    
+    // Log the scanner expense addition
+    console.log('💳 Scanner expense added:', {
+      id: docRef.id,
+      merchantName: newScannerExpense.merchantName,
+      amount: newScannerExpense.totalAmount,
+      timestamp: newScannerExpense.createdAt
+    });
+    
     return docRef.id;
   }
 
@@ -854,6 +1094,73 @@ export class EnhancedFirebaseService {
       ...updateData,
       updatedAt: new Date().toISOString()
     });
+  }
+
+  // Helper Methods to create sample data for testing
+  static async createSampleBudget(): Promise<void> {
+    if (!auth.currentUser) throw new Error('No authenticated user');
+    
+    const sampleBudget = {
+      category: 'Food & Dining',
+      amount: 5000,
+      spent: 1200,
+      period: 'monthly' as const,
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      alertThreshold: 80,
+      isActive: true,
+      notifications: true
+    };
+    
+    await this.addBudget(sampleBudget);
+    console.log('✅ Sample budget created');
+  }
+
+  static async createSampleRecurrence(): Promise<void> {
+    if (!auth.currentUser) throw new Error('No authenticated user');
+    
+    const sampleRecurrence = {
+      title: 'Monthly Rent',
+      amount: 15000,
+      category: 'Rent',
+      type: 'expense' as const,
+      frequency: 'monthly' as const,
+      nextDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      isActive: true
+    };
+    
+    await this.addRecurrence(sampleRecurrence);
+    console.log('✅ Sample recurrence created');
+  }
+
+  static async createSampleSavingsGoal(): Promise<void> {
+    if (!auth.currentUser) throw new Error('No authenticated user');
+    
+    const sampleGoal = {
+      name: 'Emergency Fund',
+      targetAmount: 50000,
+      currentAmount: 15000,
+      targetDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+      category: 'Savings',
+      priority: 'high' as const,
+      description: 'Building emergency fund for unexpected expenses',
+      isCompleted: false
+    };
+    
+    await this.addSavingsGoal(sampleGoal);
+    console.log('✅ Sample savings goal created');
+  }
+
+  // Force refresh financial summary (useful after adding scanner expenses)
+  static async refreshFinancialSummary(): Promise<{
+    totalIncome: number;
+    totalExpenses: number;
+    balance: number;
+    currentMonthIncome: number;
+    currentMonthExpenses: number;
+  }> {
+
+    return await this.getUserFinancialSummary();
   }
 }
 

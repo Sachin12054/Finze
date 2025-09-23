@@ -1,14 +1,28 @@
+# 🔥 URGENT: Fix Profile Permissions - Manual Firebase Rules Deployment
+
+## Problem
+You're getting: `ERROR  Error fetching profile: [FirebaseError: Missing or insufficient permissions.]`
+
+## Quick Fix - Manual Deployment
+
+Since Firebase CLI is having issues, deploy the rules manually through Firebase Console:
+
+### Step 1: Open Firebase Console
+1. Go to https://console.firebase.google.com/
+2. Select your project: `finze-d5d1c`
+
+### Step 2: Deploy Rules
+1. In the left sidebar, click **Firestore Database**
+2. Click on the **Rules** tab
+3. **Replace ALL the content** with the rules from your `firestore.rules` file:
+
+```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // Users collection - users can only access their own user document
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
-      
-      // Profile subcollection
-      match /profile/{profileId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
-      }
       
       // General expenses subcollection (main expenses collection)
       match /expenses/{expenseId} {
@@ -20,7 +34,7 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
       
-      // Budget subcollection (primary)
+      // Budget subcollection
       match /budget/{budgetId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
@@ -30,23 +44,13 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
       
-      // Recurrence subcollection (FIXED PATH)
+      // Recurrence subcollection
       match /recurrence/{recurrenceId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
       
-      // Set goal subcollection (FIXED PATH)
+      // Set goal subcollection
       match /setgoal/{goalId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
-      }
-      
-      // Goals subcollection (alternative naming)
-      match /goals/{goalId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
-      }
-      
-      // Recurring subcollection (alternative naming)
-      match /recurring/{recurrenceId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
       
@@ -62,11 +66,6 @@ service cloud.firestore {
       
       // AI insights subcollection
       match /ai_insights/{insightId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
-      }
-      
-      // AI Insights subcollection (alternative naming)
-      match /aiInsights/{insightId} {
         allow read, write: if request.auth != null && request.auth.uid == userId;
       }
       
@@ -91,7 +90,7 @@ service cloud.firestore {
       }
     }
     
-    // Legacy collections for backwards compatibility (can be removed after migration)
+    // Legacy collections for backwards compatibility
     match /expenses/{document} {
       allow read, write: if request.auth != null && 
         (resource == null || resource.data.user_id == request.auth.uid);
@@ -128,3 +127,20 @@ service cloud.firestore {
     }
   }
 }
+```
+
+4. Click **Publish** button
+5. Confirm the deployment
+
+### Step 3: Test
+1. Restart your Expo app
+2. The profile error should be resolved
+
+## What This Fixes
+- ✅ Profile fetching permissions
+- ✅ User data access
+- ✅ Scanner expenses access
+- ✅ All subcollection permissions
+
+## If It Still Doesn't Work
+Try logging out and logging back into your app to refresh the authentication token.

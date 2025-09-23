@@ -19,11 +19,13 @@ import { TransactionCard, TransactionCardData } from './TransactionCard';
 interface CalendarComponentProps {
   visible: boolean;
   onClose: () => void;
+  refreshTrigger?: number;
 }
 
 export const CalendarComponent: React.FC<CalendarComponentProps> = ({
   visible,
   onClose,
+  refreshTrigger = 0,
 }) => {
   // Theme context
   const { isDarkTheme } = useTheme();
@@ -56,6 +58,7 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
   const [calendarData, setCalendarData] = useState<CalendarMonth | null>(null);
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
   const [loading, setLoading] = useState(false);
+  const [lastRefreshTrigger, setLastRefreshTrigger] = useState(-1);
 
   // Helper function to format currency properly
   const formatCurrency = (amount: number | undefined | null) => {
@@ -69,12 +72,10 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
   const loadCalendarData = async () => {
     setLoading(true);
     try {
-      console.log('Loading calendar data for:', currentDate.getFullYear(), currentDate.getMonth());
       const data = await CalendarService.getCalendarMonth(
         currentDate.getFullYear(),
         currentDate.getMonth()
       );
-      console.log('Calendar data loaded:', data);
       setCalendarData(data);
     } catch (error) {
       console.error('Calendar loading error:', error);
@@ -85,10 +86,31 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
   };
 
   useEffect(() => {
+    // Load calendar data when:
+    // 1. Component becomes visible for the first time
+    // 2. Month changes (currentDate dependency)
+    // 3. Refresh trigger changes (but with throttling)
     if (visible) {
-      loadCalendarData();
+      // If no data yet, load immediately
+      if (!calendarData) {
+        loadCalendarData();
+        setLastRefreshTrigger(refreshTrigger);
+        return;
+      }
+      
+      // If refresh trigger changed, wait a bit before refreshing to avoid flicker
+      if (refreshTrigger !== lastRefreshTrigger) {
+        const timeoutId = setTimeout(() => {
+          if (visible) { // Check if still visible after timeout
+            loadCalendarData();
+            setLastRefreshTrigger(refreshTrigger);
+          }
+        }, 500); // 500ms delay to prevent rapid refreshes
+        
+        return () => clearTimeout(timeoutId);
+      }
     }
-  }, [visible, currentDate]);
+  }, [visible, currentDate, refreshTrigger]);
 
   const navigateMonth = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
@@ -127,7 +149,6 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
           isSelected && { backgroundColor: colors.primary },
         ]}
         onPress={() => {
-          console.log('Selected day:', day);
           setSelectedDay(day);
         }}
       >
@@ -152,28 +173,12 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
               )}
             </View>
           )}
-
-          {hasEvents && (day.totalIncome > 0 || day.totalExpenses > 0) && (
-            <View style={styles.dayAmountContainer}>
-              {day.totalIncome > 0 && (
-                <Text style={[styles.incomeText, { color: colors.success }]} numberOfLines={1}>
-                  +₹{day.totalIncome.toFixed(0)}
-                </Text>
-              )}
-              {day.totalExpenses > 0 && (
-                <Text style={[styles.expenseText, { color: colors.error }]} numberOfLines={1}>
-                  -₹{day.totalExpenses.toFixed(0)}
-                </Text>
-              )}
-            </View>
-          )}
         </View>
       </TouchableOpacity>
     );
   };
 
   const renderEventDetails = (event: CalendarEvent) => {
-    console.log('Rendering event:', event);
     // Convert CalendarEvent to TransactionCardData
     const transactionData: TransactionCardData = {
       id: event.id,
@@ -213,10 +218,10 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
               <Ionicons name="close" size={24} color="white" />
             </TouchableOpacity>
             
-            <View style={styles.headerCenter}>
+            <View style={styles.headerCenterContainer}>
               <TouchableOpacity
                 onPress={() => navigateMonth('prev')}
-                style={styles.navButton}
+                style={styles.monthNavButton}
               >
                 <Ionicons name="chevron-back" size={20} color="white" />
               </TouchableOpacity>
@@ -227,17 +232,19 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
               
               <TouchableOpacity
                 onPress={() => navigateMonth('next')}
-                style={styles.navButton}
+                style={styles.monthNavButton}
               >
                 <Ionicons name="chevron-forward" size={20} color="white" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.headerRight}>
-              <Text style={styles.monthTotal}>
-                Net: {formatCurrency(calendarData?.netAmount || 0)}
-              </Text>
-            </View>
+            <View style={styles.spacer} />
+          </View>
+          
+          <View style={styles.headerSummary}>
+            <Text style={styles.monthTotal}>
+              Net Amount: {formatCurrency(calendarData?.netAmount || 0)}
+            </Text>
           </View>
         </LinearGradient>
 
@@ -273,32 +280,73 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
                 )}
               </View>
 
-              {/* Month Summary */}
+              {/* Daily Spending Overview */}
               {calendarData && (
                 <View style={[styles.summaryContainer, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
-                  <Text style={[styles.summaryTitle, { color: colors.text }]}>Monthly Summary</Text>
-                  <View style={styles.summaryGrid}>
-                    <View style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
-                      <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Income</Text>
-                      <Text style={[styles.summaryValue, { color: colors.success }]}>
-                        +{formatCurrency(calendarData.totalIncome)}
+                  <Text style={[styles.summaryTitle, { color: colors.text }]}>Daily Spending Overview</Text>
+                  
+                  {/* Today's Spending */}
+                  <View style={[styles.todaySpendingCard, { backgroundColor: colors.primarySurface, borderColor: colors.primary }]}>
+                    <Text style={[styles.todayLabel, { color: colors.primary }]}>Today's Total</Text>
+                    <Text style={[styles.todayAmount, { color: colors.primary }]}>
+                      {formatCurrency(calendarData.days.find(day => day.isToday)?.totalExpenses || 0)}
+                    </Text>
+                    {(calendarData.days.find(day => day.isToday)?.events.length || 0) > 0 && (
+                      <Text style={[styles.todayTransactions, { color: colors.textSecondary }]}>
+                        {calendarData.days.find(day => day.isToday)?.events.length || 0} transactions
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Top Spending Days */}
+                  <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Top Spending Days This Month</Text>
+                  <ScrollView style={styles.topSpendingList} showsVerticalScrollIndicator={false}>
+                    {calendarData.days
+                      .filter(day => day.totalExpenses > 0 && day.isCurrentMonth)
+                      .sort((a, b) => b.totalExpenses - a.totalExpenses)
+                      .slice(0, 5)
+                      .map(day => (
+                        <TouchableOpacity 
+                          key={day.date}
+                          style={[styles.spendingDayCard, { backgroundColor: colors.surface }]}
+                          onPress={() => setSelectedDay(day)}
+                        >
+                          <View style={styles.spendingDayInfo}>
+                            <Text style={[styles.spendingDate, { color: colors.text }]}>
+                              {new Date(day.date).toLocaleDateString('en-US', { 
+                                weekday: 'short', 
+                                day: 'numeric' 
+                              })}
+                            </Text>
+                            <Text style={[styles.spendingAmount, { color: colors.error }]}>
+                              {formatCurrency(day.totalExpenses)}
+                            </Text>
+                          </View>
+                          <Text style={[styles.spendingTransactions, { color: colors.textSecondary }]}>
+                            {day.events.length} transaction{day.events.length !== 1 ? 's' : ''}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                  </ScrollView>
+
+                  {/* Monthly Stats */}
+                  <View style={styles.monthlyStatsGrid}>
+                    <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+                      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Avg/Day</Text>
+                      <Text style={[styles.statValue, { color: colors.text }]}>
+                        {formatCurrency(calendarData.totalExpenses / new Date(calendarData.year, calendarData.month + 1, 0).getDate())}
                       </Text>
                     </View>
-                    <View style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
-                      <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Expenses</Text>
-                      <Text style={[styles.summaryValue, { color: colors.error }]}>
-                        -{formatCurrency(calendarData.totalExpenses)}
+                    <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+                      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Days</Text>
+                      <Text style={[styles.statValue, { color: colors.text }]}>
+                        {calendarData.days.filter(day => day.totalExpenses > 0 && day.isCurrentMonth).length}
                       </Text>
                     </View>
-                    <View style={[styles.summaryCard, { backgroundColor: colors.surface }]}>
-                      <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Net Amount</Text>
-                      <Text
-                        style={[
-                          styles.summaryValue,
-                          { color: calendarData.netAmount >= 0 ? colors.success : colors.error }
-                        ]}
-                      >
-                        {calendarData.netAmount >= 0 ? '+' : ''}{formatCurrency(calendarData.netAmount)}
+                    <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+                      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>This Month</Text>
+                      <Text style={[styles.statValue, { color: colors.error }]}>
+                        {formatCurrency(calendarData.totalExpenses)}
                       </Text>
                     </View>
                   </View>
@@ -357,28 +405,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerCenter: {
+  headerCenterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
     justifyContent: 'center',
+    flex: 1,
   },
-  navButton: {
-    padding: 8,
+  monthNavButton: {
+    padding: 10,
+    marginHorizontal: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: 'white',
     marginHorizontal: 20,
+    textAlign: 'center',
+    minWidth: 150,
   },
-  headerRight: {
-    alignItems: 'flex-end',
+  spacer: {
+    width: 40,
+  },
+  headerSummary: {
+    alignItems: 'center',
+    marginTop: 10,
   },
   monthTotal: {
-    fontSize: 12,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '600',
+    textAlign: 'center',
   },
   content: {
     flex: 1,
@@ -434,7 +492,6 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
     borderWidth: 1,
     borderColor: 'transparent',
   },
@@ -445,10 +502,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dayText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '500',
     textAlign: 'center',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   eventsContainer: {
     flexDirection: 'row',
@@ -458,38 +515,21 @@ const styles = StyleSheet.create({
     minHeight: 8,
   },
   eventDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     marginHorizontal: 1,
   },
   moreEventsText: {
-    fontSize: 6,
+    fontSize: 8,
     marginLeft: 2,
-  },
-  dayAmountContainer: {
-    position: 'absolute',
-    bottom: 1,
-    left: 1,
-    right: 1,
-    alignItems: 'center',
-    minHeight: 12,
-  },
-  incomeText: {
-    fontSize: 7,
     fontWeight: '600',
-    textAlign: 'center',
-  },
-  expenseText: {
-    fontSize: 7,
-    fontWeight: '600',
-    textAlign: 'center',
   },
   summaryContainer: {
     margin: 16,
     marginTop: 0,
     borderRadius: 12,
-    padding: 16,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -498,9 +538,100 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   summaryTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  todaySpendingCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    alignItems: 'center',
+    borderWidth: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  todayLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  todayAmount: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  todayTransactions: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
     marginBottom: 12,
+    marginTop: 8,
+  },
+  topSpendingList: {
+    maxHeight: 200,
+    marginBottom: 20,
+  },
+  spendingDayCard: {
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  spendingDayInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  spendingDate: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  spendingAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  spendingTransactions: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  monthlyStatsGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -508,18 +639,25 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     flex: 1,
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   summaryLabel: {
     fontSize: 12,
     fontWeight: '500',
-    marginBottom: 4,
+    marginBottom: 6,
+    textAlign: 'center',
   },
   summaryValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
+    textAlign: 'center',
   },
   dayDetailsContainer: {
     margin: 16,

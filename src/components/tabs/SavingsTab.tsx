@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import { SavingsGoal } from '../../services/enhancedFirebaseService';
 
@@ -9,12 +9,18 @@ interface SavingsTabProps {
   savingsGoals: SavingsGoal[];
   isDarkTheme: boolean;
   onAddSavings: () => void;
+  onDeleteGoal?: (goalId: string) => void;
+  onUpdateProgress?: (goalId: string, amount: number) => void;
+  onEditGoal?: (goal: SavingsGoal) => void;
 }
 
 export const SavingsTab: React.FC<SavingsTabProps> = ({
   savingsGoals,
   isDarkTheme,
-  onAddSavings
+  onAddSavings,
+  onDeleteGoal,
+  onUpdateProgress,
+  onEditGoal
 }) => {
   const styles = getSavingsStyles(isDarkTheme);
 
@@ -80,6 +86,38 @@ export const SavingsTab: React.FC<SavingsTabProps> = ({
                         Target: {goal.targetDate ? new Date(goal.targetDate).toLocaleDateString() : 'No date set'}
                       </Text>
                     </View>
+                  </View>
+                  <View style={styles.actionButtons}>
+                    {onEditGoal && (
+                      <Pressable
+                        style={styles.actionButton}
+                        onPress={() => onEditGoal(goal)}
+                      >
+                        <Ionicons name="pencil" size={18} color="white" />
+                      </Pressable>
+                    )}
+                    {onDeleteGoal && goal.id && (
+                      <Pressable
+                        style={[styles.actionButton, styles.deleteButton]}
+                        onPress={() => {
+                          // Add confirmation alert
+                          Alert.alert(
+                            'Delete Goal',
+                            'Are you sure you want to delete this savings goal?',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              { 
+                                text: 'Delete', 
+                                style: 'destructive',
+                                onPress: () => onDeleteGoal(goal.id!)
+                              }
+                            ]
+                          );
+                        }}
+                      >
+                        <Ionicons name="trash" size={18} color="white" />
+                      </Pressable>
+                    )}
                   </View>
                   {goal.isCompleted && (
                     <View style={styles.completedBadge}>
@@ -256,5 +294,20 @@ const getSavingsStyles = (isDark: boolean) => StyleSheet.create({
     fontWeight: '700',
     color: 'white',
     minWidth: 40,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    backgroundColor: 'rgba(255, 59, 48, 0.7)',
   },
 });

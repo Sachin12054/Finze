@@ -1,22 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { EnhancedFirebaseService } from '../services/enhancedFirebaseService';
+import Animated, { BounceIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { EnhancedFirebaseService, Recurrence } from '../services/enhancedFirebaseService';
 
 interface AddRecurringDialogProps {
   visible: boolean;
   onClose: () => void;
   isDarkTheme: boolean;
+  editingRecurrence?: Recurrence | null;
 }
 
 const frequencies = [
@@ -34,21 +36,46 @@ const transactionTypes = [
 export const AddRecurringDialog: React.FC<AddRecurringDialogProps> = ({
   visible,
   onClose,
-  isDarkTheme
+  isDarkTheme,
+  editingRecurrence
 }) => {
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
-  const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
 
   const styles = getStyles(isDarkTheme);
+  const isEditing = !!editingRecurrence;
+
+  // Populate form when editing
+  useEffect(() => {
+    if (editingRecurrence) {
+      setTitle(editingRecurrence.title || '');
+      setAmount(editingRecurrence.amount.toString());
+      setType(editingRecurrence.type);
+      setFrequency(editingRecurrence.frequency);
+      setDescription(''); // Description might not be in the interface
+    } else {
+      // Reset form when not editing
+      setTitle('');
+      setAmount('');
+      setType('expense');
+      setFrequency('monthly');
+      setDescription('');
+    }
+  }, [editingRecurrence, visible]);
 
   const handleSave = async () => {
-    if (!title || !amount || !category) {
+    if (!title || !amount) {
       Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    const amountValue = parseFloat(amount);
+    if (isNaN(amountValue) || amountValue <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
       return;
     }
 
@@ -56,21 +83,31 @@ export const AddRecurringDialog: React.FC<AddRecurringDialogProps> = ({
     try {
       const nextDate = getNextDate(frequency);
       
-      await EnhancedFirebaseService.addRecurrence({
+      const recurrenceData = {
         title,
-        amount: parseFloat(amount),
+        amount: amountValue,
         type,
         frequency,
-        category,
+        category: type === 'income' ? 'Income' : 'General', // Auto-assign category
         nextDate: nextDate.toISOString(),
         isActive: true
-      });
+      };
 
-      Alert.alert('Success', 'Recurring transaction created successfully!');
+      if (isEditing && editingRecurrence?.id) {
+        // Update existing recurrence
+        await EnhancedFirebaseService.updateRecurrence(editingRecurrence.id, recurrenceData);
+        Alert.alert('Success', 'Recurring transaction updated successfully!');
+      } else {
+        // Create new recurrence
+        await EnhancedFirebaseService.addRecurrence(recurrenceData);
+        Alert.alert('Success', 'Recurring transaction created successfully!');
+      }
+
       resetForm();
       onClose();
     } catch (error) {
-      Alert.alert('Error', 'Failed to create recurring transaction');
+      console.error('Save error:', error);
+      Alert.alert('Error', 'Failed to save recurring transaction. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -97,218 +134,243 @@ export const AddRecurringDialog: React.FC<AddRecurringDialogProps> = ({
     setAmount('');
     setType('expense');
     setFrequency('monthly');
-    setCategory('');
     setDescription('');
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          <LinearGradient
-            colors={isDarkTheme ? ['#1E293B', '#334155'] : ['#FFFFFF', '#F8FAFC']}
-            style={styles.content}
+    <Modal
+      visible={visible}
+      animationType="fade"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <Animated.View 
+        style={styles.modalOverlay}
+        entering={FadeInDown.duration(400)}
+      >
+        <SafeAreaView style={styles.container}>
+          <Animated.View 
+            style={styles.header}
+            entering={FadeInUp.delay(200)}
           >
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.title}>Add Recurring Transaction</Text>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color={isDarkTheme ? '#E2E8F0' : '#64748B'} />
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.title}>
+              {isEditing ? 'Edit Recurring Transaction' : 'Add Recurring Transaction'}
+            </Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={onClose}
+            >
+              <Ionicons name="close" size={24} color="#666" />
+            </TouchableOpacity>
+          </Animated.View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Transaction Type */}
-              <View style={styles.section}>
-                <Text style={styles.label}>Transaction Type</Text>
-                <View style={styles.typeContainer}>
-                  {transactionTypes.map((txType) => (
-                    <TouchableOpacity
-                      key={txType.value}
-                      style={[
-                        styles.typeButton,
-                        type === txType.value && { backgroundColor: txType.color }
-                      ]}
-                      onPress={() => setType(txType.value as 'income' | 'expense')}
-                    >
-                      <Ionicons 
-                        name={txType.icon as any} 
-                        size={20} 
-                        color={type === txType.value ? '#FFFFFF' : txType.color} 
-                      />
-                      <Text style={[
-                        styles.typeText,
-                        type === txType.value && styles.typeTextSelected
-                      ]}>
-                        {txType.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Title Input */}
-              <View style={styles.section}>
-                <Text style={styles.label}>Title *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={title}
-                  onChangeText={setTitle}
-                  placeholder="e.g., Salary, Rent, Subscription"
-                  placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
-                />
-              </View>
-
-              {/* Amount Input */}
-              <View style={styles.section}>
-                <Text style={styles.label}>Amount *</Text>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.currencySymbol}>₹</Text>
-                  <TextInput
-                    style={styles.amountInput}
-                    value={amount}
-                    onChangeText={setAmount}
-                    keyboardType="numeric"
-                    placeholder="Enter amount"
-                    placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
-                  />
-                </View>
-              </View>
-
-              {/* Frequency Selection */}
-              <View style={styles.section}>
-                <Text style={styles.label}>Frequency</Text>
-                <View style={styles.frequencyGrid}>
-                  {frequencies.map((freq) => (
-                    <TouchableOpacity
-                      key={freq.value}
-                      style={[
-                        styles.frequencyItem,
-                        frequency === freq.value && styles.frequencyItemSelected
-                      ]}
-                      onPress={() => setFrequency(freq.value)}
-                    >
-                      <Ionicons 
-                        name={freq.icon as any} 
-                        size={18} 
-                        color={frequency === freq.value ? '#FFFFFF' : (isDarkTheme ? '#94A3B8' : '#64748B')} 
-                      />
-                      <Text style={[
-                        styles.frequencyText,
-                        frequency === freq.value && styles.frequencyTextSelected
-                      ]}>
-                        {freq.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Category Input */}
-              <View style={styles.section}>
-                <Text style={styles.label}>Category *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={category}
-                  onChangeText={setCategory}
-                  placeholder="e.g., Salary, Bills, Entertainment"
-                  placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
-                />
-              </View>
-
-              {/* Description Input */}
-              <View style={styles.section}>
-                <Text style={styles.label}>Description (Optional)</Text>
-                <TextInput
-                  style={[styles.input, styles.descriptionInput]}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Add notes or details..."
-                  placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-            </ScrollView>
-
-            {/* Action Buttons */}
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={onClose}
-              >
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSave}
-                disabled={loading}
-              >
-                <LinearGradient
-                  colors={['#667eea', '#764ba2']}
-                  style={styles.saveGradient}
+        <ScrollView style={styles.content}>
+          {/* Transaction Type */}
+          <Animated.View 
+            style={styles.inputGroup}
+            entering={FadeInUp.delay(400)}
+          >
+            <Text style={styles.label}>Transaction Type</Text>
+            <View style={styles.typeContainer}>
+              {transactionTypes.map((txType, index) => (
+                <Animated.View
+                  key={txType.value}
+                  style={{ flex: 1 }}
+                  entering={BounceIn.delay(500 + index * 100)}
                 >
-                  <Text style={styles.saveText}>
-                    {loading ? 'Creating...' : 'Create Recurring'}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.typeButton,
+                      type === txType.value && styles.selectedType
+                    ]}
+                    onPress={() => setType(txType.value as 'income' | 'expense')}
+                  >
+                    <Ionicons 
+                      name={txType.icon as any} 
+                      size={16} 
+                      color={type === txType.value ? '#fff' : txType.color} 
+                    />
+                    <Text style={[
+                      styles.typeText,
+                      type === txType.value && styles.selectedTypeText
+                    ]}>
+                      {txType.label}
+                    </Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              ))}
             </View>
-          </LinearGradient>
-        </View>
-      </View>
-    </Modal>
-  );
+          </Animated.View>
+
+          {/* Title Input */}
+          <Animated.View 
+            style={styles.inputGroup}
+            entering={FadeInUp.delay(600)}
+          >
+            <Text style={styles.label}>Title *</Text>
+            <TextInput
+              style={styles.input}
+              value={title}
+              onChangeText={setTitle}
+              placeholder="e.g., Salary, Rent, Subscription"
+              placeholderTextColor="#999"
+            />
+          </Animated.View>
+
+          {/* Amount Input */}
+          <Animated.View 
+            style={styles.inputGroup}
+            entering={FadeInUp.delay(700)}
+          >
+            <Text style={styles.label}>Amount *</Text>
+            <View style={styles.amountContainer}>
+              <Text style={styles.currencySymbol}>₹</Text>
+              <TextInput
+                style={styles.amountInput}
+                value={amount}
+                onChangeText={setAmount}
+                keyboardType="numeric"
+                placeholder="0.00"
+                placeholderTextColor="#999"
+              />
+            </View>
+          </Animated.View>
+
+          {/* Frequency Selection */}
+          <Animated.View 
+            style={styles.inputGroup}
+            entering={FadeInUp.delay(800)}
+          >
+            <Text style={styles.label}>Frequency</Text>
+            <View style={styles.frequencyContainer}>
+              {frequencies.map((freq, index) => (
+                <Animated.View
+                  key={freq.value}
+                  entering={BounceIn.delay(900 + index * 100)}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.frequencyButton,
+                      frequency === freq.value && styles.selectedFrequency
+                    ]}
+                    onPress={() => setFrequency(freq.value)}
+                  >
+                    <Ionicons 
+                      name={freq.icon as any} 
+                      size={16} 
+                      color={frequency === freq.value ? '#fff' : '#666'} 
+                    />
+                    <Text style={[
+                      styles.frequencyText,
+                      frequency === freq.value && styles.selectedFrequencyText
+                    ]}>
+                      {freq.label}
+                    </Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              ))}
+            </View>
+          </Animated.View>
+
+          {/* Description Input */}
+          <Animated.View 
+            style={styles.inputGroup}
+            entering={FadeInUp.delay(1100)}
+          >
+            <Text style={styles.label}>Description (Optional)</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Add notes or details..."
+              placeholderTextColor="#999"
+              multiline
+              numberOfLines={3}
+            />
+          </Animated.View>
+        </ScrollView>
+
+        <Animated.View 
+          style={styles.footer}
+          entering={FadeInUp.delay(1200)}
+        >
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={handleSave}
+            disabled={loading}
+          >
+            <Text style={styles.saveButtonText}>
+              {loading 
+                ? (isEditing ? 'Updating...' : 'Creating...') 
+                : (isEditing ? 'Update Recurring Transaction' : 'Create Recurring Transaction')
+              }
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </SafeAreaView>
+    </Animated.View>
+  </Modal>
+);
 };
 
 const getStyles = (isDark: boolean) => StyleSheet.create({
-  overlay: {
+  modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
   container: {
+    flex: 1,
+    backgroundColor: isDark ? '#1F2937' : '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     maxHeight: '90%',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-  },
-  content: {
-    padding: 24,
-    minHeight: 600,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: isDark ? '#374151' : '#f0f0f0',
   },
   title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: isDark ? '#F1F5F9' : '#1E293B',
+    fontSize: 20,
+    fontWeight: '600',
+    color: isDark ? '#F1F5F9' : '#333',
   },
   closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: isDark ? '#374151' : '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 4,
   },
-  section: {
+  content: {
+    flex: 1,
+    padding: 20,
+  },
+  inputGroup: {
     marginBottom: 20,
   },
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: isDark ? '#E2E8F0' : '#374151',
-    marginBottom: 12,
+    color: isDark ? '#F1F5F9' : '#333',
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: isDark ? '#4B5563' : '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: isDark ? '#374151' : '#fff',
+    color: isDark ? '#F1F5F9' : '#000',
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
   },
   typeContainer: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
   typeButton: {
     flex: 1,
@@ -316,114 +378,88 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: isDark ? '#374151' : '#F8FAFC',
+    paddingHorizontal: 16,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: isDark ? '#4B5563' : '#E2E8F0',
-    gap: 8,
+    borderColor: isDark ? '#4B5563' : '#ddd',
+    backgroundColor: isDark ? '#374151' : '#f9f9f9',
+    gap: 6,
+  },
+  selectedType: {
+    backgroundColor: '#6366F1',
+    borderColor: '#6366F1',
   },
   typeText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: isDark ? '#94A3B8' : '#64748B',
+    color: isDark ? '#D1D5DB' : '#666',
   },
-  typeTextSelected: {
-    color: '#FFFFFF',
-  },
-  input: {
-    backgroundColor: isDark ? '#374151' : '#F8FAFC',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: isDark ? '#4B5563' : '#E2E8F0',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    fontSize: 16,
+  selectedTypeText: {
+    color: '#fff',
     fontWeight: '500',
-    color: isDark ? '#F1F5F9' : '#1E293B',
   },
-  inputContainer: {
+  amountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: isDark ? '#374151' : '#F8FAFC',
-    borderRadius: 12,
     borderWidth: 1,
-    borderColor: isDark ? '#4B5563' : '#E2E8F0',
-    paddingHorizontal: 16,
+    borderColor: isDark ? '#4B5563' : '#ddd',
+    borderRadius: 8,
+    backgroundColor: isDark ? '#374151' : '#fff',
+    paddingHorizontal: 12,
   },
   currencySymbol: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
-    color: isDark ? '#E2E8F0' : '#374151',
+    color: isDark ? '#F1F5F9' : '#333',
     marginRight: 8,
   },
   amountInput: {
     flex: 1,
     fontSize: 16,
-    fontWeight: '500',
-    color: isDark ? '#F1F5F9' : '#1E293B',
-    paddingVertical: 16,
+    paddingVertical: 12,
+    color: isDark ? '#F1F5F9' : '#000',
   },
-  frequencyGrid: {
+  frequencyContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  frequencyItem: {
+  frequencyButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: isDark ? '#374151' : '#F8FAFC',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: isDark ? '#4B5563' : '#E2E8F0',
+    borderColor: isDark ? '#4B5563' : '#ddd',
+    backgroundColor: isDark ? '#374151' : '#f9f9f9',
     gap: 6,
   },
-  frequencyItemSelected: {
-    backgroundColor: '#667eea',
-    borderColor: '#667eea',
+  selectedFrequency: {
+    backgroundColor: '#6366F1',
+    borderColor: '#6366F1',
   },
   frequencyText: {
     fontSize: 14,
+    color: isDark ? '#D1D5DB' : '#666',
+  },
+  selectedFrequencyText: {
+    color: '#fff',
     fontWeight: '500',
-    color: isDark ? '#94A3B8' : '#64748B',
   },
-  frequencyTextSelected: {
-    color: '#FFFFFF',
-  },
-  descriptionInput: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 24,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: isDark ? '#374151' : '#F3F4F6',
-    alignItems: 'center',
-  },
-  cancelText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: isDark ? '#94A3B8' : '#64748B',
+  footer: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: isDark ? '#374151' : '#f0f0f0',
   },
   saveButton: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  saveGradient: {
-    paddingVertical: 16,
+    backgroundColor: '#6366F1',
+    padding: 16,
+    borderRadius: 8,
     alignItems: 'center',
   },
-  saveText: {
+  saveButtonText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    fontWeight: '600',
+    color: '#fff',
   },
 });

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -73,6 +73,10 @@ const categoryIcons = {
   'Other': 'grid',
 } as const;
 
+// Error logging debounce
+let lastErrorLogTime = 0;
+const ERROR_LOG_DEBOUNCE = 5000; // 5 seconds
+
 export default function HomeScreen() {
   const { isDarkTheme, toggleTheme } = useTheme();
   const router = useRouter();
@@ -102,6 +106,19 @@ export default function HomeScreen() {
     currentMonthIncome: 0,
     currentMonthExpenses: 0
   });
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [lastRefreshTime, setLastRefreshTime] = useState(0);
+  
+  // Debounced refresh function to prevent calendar flickering
+  const debouncedRefresh = useCallback(() => {
+    const now = Date.now();
+    const REFRESH_DEBOUNCE = 3000; // 3 second debounce to prevent excessive refreshing
+    
+    if (now - lastRefreshTime > REFRESH_DEBOUNCE) {
+      setLastRefreshTime(now);
+      setRefreshKey(prev => prev + 1);
+    }
+  }, [lastRefreshTime]);
   
   // UI state
   const [isBalanceVisible, setIsBalanceVisible] = useState(true);
@@ -127,6 +144,7 @@ export default function HomeScreen() {
   const balance = financialSummary.balance;
   const monthlyIncome = financialSummary.currentMonthIncome;
   const monthlyExpenses = financialSummary.currentMonthExpenses;
+  
   const currentMonthTransactions = transactions.filter(t => {
     const transactionDate = new Date(t.date);
     const currentMonth = new Date().getMonth();
@@ -136,6 +154,10 @@ export default function HomeScreen() {
   const currentMonthExpenseAmount = financialSummary.currentMonthExpenses;
   const totalBudgetAmount = budgets.reduce((sum, budget) => sum + budget.amount, 0);
   const budgetProgress = totalBudgetAmount > 0 ? (currentMonthExpenseAmount / totalBudgetAmount) * 100 : 0;
+
+
+
+
 
   // Theme toggle animation function
   const animateThemeToggle = () => {
@@ -170,7 +192,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     let unsubscribeFunctions: (() => void)[] = [];
-    
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       try {
         if (!currentUser) {
@@ -202,17 +224,8 @@ export default function HomeScreen() {
             setUserProfile(newProfile?.profile || {});
           }
         } catch (profileError: any) {
-          console.warn('Profile setup warning:', profileError);
-          
-          // Handle specific permission errors more gracefully
-          if (profileError.message && profileError.message.includes('deploy Firestore rules')) {
-            console.log('ℹ️ Database permissions need setup - continuing with limited functionality');
-            // Continue without profile data - user can set it up later
-            setUserProfile(null);
-          } else {
-            // Continue without profile data - user can set it up later
-            setUserProfile(null);
-          }
+          // Continue without profile data - user can set it up later
+          setUserProfile(null);
         }
 
         // Set up real-time listeners
@@ -220,13 +233,24 @@ export default function HomeScreen() {
           // Use Enhanced Firebase Service for all data
           const unsubscribeTransactions = EnhancedFirebaseService.getTransactionsListener(async (transactionData) => {
             setTransactions(transactionData);
-            
-            // Refresh financial summary whenever transactions change
+
+            // Force refresh financial summary whenever transactions change
             try {
+              // Add small delay to ensure Firebase operations complete
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
               const summary = await EnhancedFirebaseService.getUserFinancialSummary();
               setFinancialSummary(summary);
+              
+              // Use debounced refresh to prevent calendar flickering
+              debouncedRefresh();
+              setRefreshing(false);
             } catch (error) {
-              console.warn('Error refreshing financial summary after transaction update:', error);
+              const now = Date.now();
+              if (now - lastErrorLogTime > ERROR_LOG_DEBOUNCE) {
+                lastErrorLogTime = now;
+                console.error('❌ Error refreshing financial summary:', error);
+              }
             }
           });
           unsubscribeFunctions.push(unsubscribeTransactions);
@@ -246,26 +270,23 @@ export default function HomeScreen() {
             try {
               const summary = await EnhancedFirebaseService.getUserFinancialSummary();
               setFinancialSummary(summary);
+              debouncedRefresh();
             } catch (error) {
-              console.warn('Error loading financial summary:', error);
+              // Silent fail for summary load
             }
           };
-          
+
+          // Load initial financial summary
           loadFinancialSummary();
-          // Refresh summary every 10 seconds or when transactions change
-          const summaryInterval = setInterval(loadFinancialSummary, 10000);
-          unsubscribeFunctions.push(() => clearInterval(summaryInterval));
+          // Note: Real-time updates are handled by transaction listeners above
 
         } catch (listenersError) {
-          console.warn('Listeners setup warning:', listenersError);
-          // Don't show error toast for listener setup issues - they're often temporary
-          // Just log the warning and continue with offline mode
+          // Silent fail for listeners setup
         }
 
         setLoading(false);
 
       } catch (error) {
-        console.error('Auth error:', error);
         toast({
           title: "Authentication Error",
           description: "Please try signing in again",
@@ -296,22 +317,21 @@ export default function HomeScreen() {
       });
 
       setShowAddExpense(false);
-      
+
       // Refresh financial summary after adding transaction
       try {
         const summary = await EnhancedFirebaseService.getUserFinancialSummary();
         setFinancialSummary(summary);
       } catch (summaryError) {
-        console.warn('Error refreshing financial summary:', summaryError);
+        // Silent fail for summary refresh
       }
-      
+
       toast({
         title: "Success!",
         description: `${transactionData.type === 'income' ? 'Income' : 'Expense'} added successfully`,
         variant: "success"
       });
     } catch (error) {
-      console.error('Error adding transaction:', error);
       toast({
         title: "Error",
         description: "Failed to add transaction",
@@ -351,21 +371,21 @@ export default function HomeScreen() {
           databaseService.getUserById(auth.currentUser.uid),
           EnhancedFirebaseService.getUserFinancialSummary()
         ]);
-        
+
         if (updatedProfile) {
           setUserProfile(updatedProfile.profile);
         }
-        
+
         setFinancialSummary(updatedSummary);
+        debouncedRefresh();
       }
-      
+
       toast({
         title: "Refreshed",
         description: "Data updated successfully",
         variant: "success"
       });
     } catch (error) {
-      console.error('Refresh error:', error);
       toast({
         title: "Refresh failed",
         description: "Please check your connection",
@@ -409,7 +429,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} key={`dashboard-${refreshKey}-${financialSummary.balance}-${transactions.length}`}>
       <StatusBar barStyle="light-content" backgroundColor="#6366F1" />
       
       {/* Firebase Status Banner */}
@@ -467,6 +487,7 @@ export default function HomeScreen() {
                     />
                   </TouchableOpacity>
                 </RNAnimated.View>
+                
                 <TouchableOpacity
                   style={styles.profileButton}
                   onPress={() => setShowProfileDialog(true)}
@@ -482,7 +503,7 @@ export default function HomeScreen() {
         </LinearGradient>
 
         {/* Enhanced Balance Card - Dashboard Style */}
-        <Animated.View style={[styles.balanceCardContainer, balanceCardStyle]}>
+        <Animated.View style={[styles.balanceCardContainer, balanceCardStyle]} key={`balance-${refreshKey}-${financialSummary.balance}-${financialSummary.currentMonthExpenses}`}>
           <LinearGradient
             colors={isDarkTheme ? ['#1e293b', '#334155', '#475569'] : ['#f8fafc', '#e2e8f0', '#cbd5e1']}
             start={{ x: 0, y: 0 }}
@@ -673,15 +694,6 @@ export default function HomeScreen() {
                   ]} 
                 />
               </View>
-              
-              <View style={styles.budgetAmounts}>
-                <Text style={styles.budgetSpent}>
-                  ₹{currentMonthExpenseAmount.toLocaleString('en-IN')} spent
-                </Text>
-                <Text style={styles.budgetTotal}>
-                  of ₹{totalBudgetAmount.toLocaleString('en-IN')}
-                </Text>
-              </View>
             </View>
           </Animated.View>
         )}
@@ -796,16 +808,16 @@ export default function HomeScreen() {
         onOpenChange={setShowHistory}
         expenses={transactions.map(t => ({
           id: t.id || '',
-          title: t.description || 'Transaction',
+          title: t.title || t.description || 'Transaction',
           amount: t.amount,
           category: t.category || '',
           date: t.date,
-          description: t.description || '',
+          description: t.description || t.title || '',
           source: t.source || 'manual',
           type: t.type,
           expense_id: t.id || '',
           user_id: 'current-user',
-          payment_method: 'Unknown'
+          payment_method: t.paymentMethod || 'Unknown'
         }))}
         onDeleteExpense={() => {}}
         onEditExpense={() => {}}
@@ -827,6 +839,7 @@ export default function HomeScreen() {
       <CalendarComponent
         visible={showCalendar}
         onClose={() => setShowCalendar(false)}
+        refreshTrigger={refreshKey}
       />
 
       <SmartSuggestionsComponent

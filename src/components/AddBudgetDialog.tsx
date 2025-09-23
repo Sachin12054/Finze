@@ -1,30 +1,39 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import {
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import Animated, { BounceIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { EnhancedFirebaseService } from '../services/enhancedFirebaseService';
-
-interface BudgetData {
-  category: string;
-  amount: number;
-  period: 'monthly' | 'weekly' | 'yearly';
-  description?: string;
-}
 
 interface AddBudgetDialogProps {
   visible: boolean;
   onClose: () => void;
   isDarkTheme: boolean;
 }
+
+const categories = [
+  { value: 'Food & Dining', label: 'Food & Dining', icon: 'restaurant' },
+  { value: 'Transportation', label: 'Transportation', icon: 'car' },
+  { value: 'Shopping', label: 'Shopping', icon: 'bag' },
+  { value: 'Entertainment', label: 'Entertainment', icon: 'game-controller' },
+  { value: 'Healthcare', label: 'Healthcare', icon: 'medical' },
+  { value: 'Other', label: 'Other', icon: 'ellipsis-horizontal' }
+];
+
+const periods = [
+  { value: 'weekly' as const, label: 'Weekly', icon: 'calendar' },
+  { value: 'monthly' as const, label: 'Monthly', icon: 'calendar-outline' },
+  { value: 'yearly' as const, label: 'Yearly', icon: 'calendar-clear' }
+];
 
 const AddBudgetDialog: React.FC<AddBudgetDialogProps> = ({
   visible,
@@ -33,8 +42,11 @@ const AddBudgetDialog: React.FC<AddBudgetDialogProps> = ({
 }) => {
   const [category, setCategory] = useState('Other');
   const [amount, setAmount] = useState('');
-  const [period, setPeriod] = useState<'monthly' | 'weekly' | 'yearly'>('monthly');
+  const [period, setPeriod] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
   const [description, setDescription] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const styles = getStyles(isDarkTheme);
 
   const handleSave = async () => {
     if (!amount.trim()) {
@@ -42,10 +54,17 @@ const AddBudgetDialog: React.FC<AddBudgetDialogProps> = ({
       return;
     }
 
+    const amountValue = parseFloat(amount);
+    if (isNaN(amountValue) || amountValue <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+
+    setLoading(true);
     try {
       const budgetData = {
         category,
-        amount: parseFloat(amount),
+        amount: amountValue,
         period,
         description: description.trim(),
         startDate: new Date().toISOString(),
@@ -57,18 +76,6 @@ const AddBudgetDialog: React.FC<AddBudgetDialogProps> = ({
       };
 
       await EnhancedFirebaseService.addBudget(budgetData);
-
-      // Create legacy format for backward compatibility
-      const legacyBudgetData: BudgetData = {
-        category,
-        amount: parseFloat(amount),
-        period,
-        description: description.trim()
-      };
-
-      // Save to Firebase
-      await EnhancedFirebaseService.addBudget(budgetData);
-      onClose();
       
       // Reset form
       setCategory('Other');
@@ -76,14 +83,17 @@ const AddBudgetDialog: React.FC<AddBudgetDialogProps> = ({
       setPeriod('monthly');
       setDescription('');
       
+      onClose();
       Alert.alert('Success', 'Budget created successfully!');
     } catch (error) {
       console.error('Error saving budget:', error);
       Alert.alert('Error', 'Failed to create budget. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getEndDate = (period: 'monthly' | 'weekly' | 'yearly'): string => {
+  const getEndDate = (period: 'weekly' | 'monthly' | 'yearly'): string => {
     const now = new Date();
     switch (period) {
       case 'weekly':
@@ -98,113 +108,171 @@ const AddBudgetDialog: React.FC<AddBudgetDialogProps> = ({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Add Budget</Text>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={onClose}
+      <Animated.View 
+        style={styles.modalOverlay}
+        entering={FadeInDown.duration(400)}
+      >
+        <SafeAreaView style={styles.container}>
+          <Animated.View 
+            style={styles.header}
+            entering={FadeInUp.delay(200)}
           >
-            <Ionicons name="close" size={24} color="#666" />
-          </TouchableOpacity>
-        </View>
+            <Text style={styles.title}>Create Budget</Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={onClose}
+            >
+              <Ionicons name="close" size={24} color="#666" />
+            </TouchableOpacity>
+          </Animated.View>
 
-        <ScrollView style={styles.content}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Category</Text>
-            <View style={styles.categoryContainer}>
-              {['Food & Dining', 'Transportation', 'Shopping', 'Entertainment', 'Other'].map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[
-                    styles.categoryButton,
-                    category === cat && styles.selectedCategory
-                  ]}
-                  onPress={() => setCategory(cat)}
-                >
-                  <Text style={[
-                    styles.categoryText,
-                    category === cat && styles.selectedCategoryText
-                  ]}>
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            {/* Category Selection */}
+            <Animated.View 
+              style={styles.inputGroup}
+              entering={FadeInUp.delay(400)}
+            >
+              <Text style={styles.label}>Category *</Text>
+              <View style={styles.categoryContainer}>
+                {categories.map((cat, index) => (
+                  <Animated.View
+                    key={cat.value}
+                    entering={BounceIn.delay(500 + index * 100)}
+                  >
+                    <TouchableOpacity
+                      style={[
+                        styles.categoryButton,
+                        category === cat.value && styles.selectedCategory
+                      ]}
+                      onPress={() => setCategory(cat.value)}
+                    >
+                      <Ionicons 
+                        name={cat.icon as any} 
+                        size={16} 
+                        color={category === cat.value ? '#fff' : '#666'} 
+                      />
+                      <Text style={[
+                        styles.categoryText,
+                        category === cat.value && styles.selectedCategoryText
+                      ]}>
+                        {cat.label}
+                      </Text>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
+              </View>
+            </Animated.View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Budget Amount *</Text>
-            <TextInput
-              style={styles.input}
-              value={amount}
-              onChangeText={setAmount}
-              placeholder="0.00"
-              keyboardType="numeric"
-            />
-          </View>
+            {/* Budget Amount */}
+            <Animated.View 
+              style={styles.inputGroup}
+              entering={FadeInUp.delay(600)}
+            >
+              <Text style={styles.label}>Budget Amount *</Text>
+              <View style={styles.amountContainer}>
+                <Text style={styles.currencySymbol}>₹</Text>
+                <TextInput
+                  style={styles.amountInput}
+                  value={amount}
+                  onChangeText={setAmount}
+                  placeholder="0.00"
+                  placeholderTextColor="#999"
+                  keyboardType="numeric"
+                />
+              </View>
+            </Animated.View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Budget Period</Text>
-            <View style={styles.periodContainer}>
-              {[
-                { key: 'weekly', label: 'Weekly' },
-                { key: 'monthly', label: 'Monthly' },
-                { key: 'yearly', label: 'Yearly' }
-              ].map((periodOption) => (
-                <TouchableOpacity
-                  key={periodOption.key}
-                  style={[
-                    styles.periodButton,
-                    period === periodOption.key && styles.selectedPeriod
-                  ]}
-                  onPress={() => setPeriod(periodOption.key as any)}
-                >
-                  <Text style={[
-                    styles.periodText,
-                    period === periodOption.key && styles.selectedPeriodText
-                  ]}>
-                    {periodOption.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+            {/* Budget Period */}
+            <Animated.View 
+              style={styles.inputGroup}
+              entering={FadeInUp.delay(700)}
+            >
+              <Text style={styles.label}>Budget Period *</Text>
+              <View style={styles.periodContainer}>
+                {periods.map((periodOption, index) => (
+                  <Animated.View
+                    key={periodOption.value}
+                    style={{ flex: 1 }}
+                    entering={BounceIn.delay(800 + index * 100)}
+                  >
+                    <TouchableOpacity
+                      style={[
+                        styles.periodButton,
+                        period === periodOption.value && styles.selectedPeriod
+                      ]}
+                      onPress={() => setPeriod(periodOption.value)}
+                    >
+                      <Ionicons 
+                        name={periodOption.icon as any} 
+                        size={16} 
+                        color={period === periodOption.value ? '#fff' : '#666'} 
+                      />
+                      <Text style={[
+                        styles.periodText,
+                        period === periodOption.value && styles.selectedPeriodText
+                      ]}>
+                        {periodOption.label}
+                      </Text>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
+              </View>
+            </Animated.View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Description (Optional)</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={description}
-              onChangeText={setDescription}
-              placeholder="Add a note about this budget"
-              multiline
-              numberOfLines={3}
-            />
-          </View>
-        </ScrollView>
+            {/* Description Input */}
+            <Animated.View 
+              style={styles.inputGroup}
+              entering={FadeInUp.delay(900)}
+            >
+              <Text style={styles.label}>Description (Optional)</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Add notes about this budget..."
+                placeholderTextColor="#999"
+                multiline
+                numberOfLines={3}
+              />
+            </Animated.View>
+          </ScrollView>
 
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={styles.saveButton}
-            onPress={handleSave}
+          <Animated.View 
+            style={styles.footer}
+            entering={FadeInUp.delay(1000)}
           >
-            <Text style={styles.saveButtonText}>Save Budget</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleSave}
+              disabled={loading}
+            >
+              <Text style={styles.saveButtonText}>
+                {loading ? 'Creating...' : 'Create Budget'}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </SafeAreaView>
+      </Animated.View>
     </Modal>
   );
 };
 
-const styles = StyleSheet.create({
+const getStyles = (isDark: boolean) => StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: isDark ? '#1F2937' : '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '90%',
   },
   header: {
     flexDirection: 'row',
@@ -212,12 +280,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: isDark ? '#374151' : '#f0f0f0',
   },
   title: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#333',
+    color: isDark ? '#F1F5F9' : '#333',
   },
   closeButton: {
     padding: 4,
@@ -232,16 +300,17 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: isDark ? '#F1F5F9' : '#333',
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: isDark ? '#4B5563' : '#ddd',
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: isDark ? '#374151' : '#fff',
+    color: isDark ? '#F1F5F9' : '#000',
   },
   textArea: {
     height: 80,
@@ -253,12 +322,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   categoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#ddd',
-    backgroundColor: '#f9f9f9',
+    borderColor: isDark ? '#4B5563' : '#ddd',
+    backgroundColor: isDark ? '#374151' : '#f9f9f9',
+    gap: 6,
   },
   selectedCategory: {
     backgroundColor: '#6366F1',
@@ -266,11 +338,32 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 14,
-    color: '#666',
+    color: isDark ? '#D1D5DB' : '#666',
   },
   selectedCategoryText: {
     color: '#fff',
     fontWeight: '500',
+  },
+  amountContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: isDark ? '#4B5563' : '#ddd',
+    borderRadius: 8,
+    backgroundColor: isDark ? '#374151' : '#fff',
+    paddingHorizontal: 12,
+  },
+  currencySymbol: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: isDark ? '#F1F5F9' : '#333',
+    marginRight: 8,
+  },
+  amountInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingVertical: 12,
+    color: isDark ? '#F1F5F9' : '#000',
   },
   periodContainer: {
     flexDirection: 'row',
@@ -278,13 +371,16 @@ const styles = StyleSheet.create({
   },
   periodButton: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#ddd',
-    backgroundColor: '#f9f9f9',
-    alignItems: 'center',
+    borderColor: isDark ? '#4B5563' : '#ddd',
+    backgroundColor: isDark ? '#374151' : '#f9f9f9',
+    gap: 6,
   },
   selectedPeriod: {
     backgroundColor: '#6366F1',
@@ -292,7 +388,7 @@ const styles = StyleSheet.create({
   },
   periodText: {
     fontSize: 14,
-    color: '#666',
+    color: isDark ? '#D1D5DB' : '#666',
   },
   selectedPeriodText: {
     color: '#fff',
@@ -301,7 +397,7 @@ const styles = StyleSheet.create({
   footer: {
     padding: 20,
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: isDark ? '#374151' : '#f0f0f0',
   },
   saveButton: {
     backgroundColor: '#6366F1',

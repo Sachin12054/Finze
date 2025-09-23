@@ -2,19 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  LayoutAnimation,
-  Modal,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    LayoutAnimation,
+    Modal,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
@@ -22,6 +22,9 @@ import { EnhancedFirebaseService } from '../services/enhancedFirebaseService';
 import { auth } from '../services/firebase';
 import { receiptScannerService } from '../services/receiptScannerService';
 import { ExtractedDetails } from '../types/expense';
+
+// Static variable to track if backend status has been logged
+let backendStatusLogged = false;
 
 interface ScannerDialogProps {
   open: boolean;
@@ -181,10 +184,14 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
       const connection = await receiptScannerService.testConnection();
       setBackendAvailable(connection.connected);
       
-      if (connection.connected) {
-        console.log('✅ Backend services ready for receipt scanning');
-      } else {
-        console.warn('⚠️ Backend services not available, using fallback mode');
+      // Only log status once
+      if (!backendStatusLogged) {
+        backendStatusLogged = true;
+        if (connection.connected) {
+          console.log('✅ Backend services ready for receipt scanning');
+        } else {
+          console.warn('⚠️ Backend services not available, using fallback mode');
+        }
       }
     } catch (error) {
       console.error('Error checking backend status:', error);
@@ -392,43 +399,41 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
         return;
       }
       
-      // Create transaction object for Enhanced Firebase Service
-      const transactionData = {
-        title: `Receipt from ${editableData.merchant_name}`,
-        amount: safeParseFloat(editableData.total_amount),
-        category: editableData.category,
-        type: transactionType,
-        source: 'OCR' as const,
-        description: `Items: ${editableData.items.map((item: any) => item.name).join(', ')}`,
-        date: editableData.date || new Date().toISOString(),
-        paymentMethod: 'Cash', // Default, can be made editable
-        location: editableData.merchant_name || '',
-        receipt: extractedData?.processing_time || '',
-        tags: ['receipt', 'scanned']
-      };
-
-      // Save using Enhanced Firebase Service
-      const transactionId = await EnhancedFirebaseService.addTransaction(transactionData);
+      // Create scanner expense data with cleaned merchant name
+      const cleanMerchantName = editableData.merchant_name
+        ?.replace(/^receipt\s+from\s+/gi, '')
+        ?.replace(/extracted\s+text\s*/gi, '')
+        ?.trim() || 'Unknown Merchant';
 
       // Calculate GST and subtotal using the same logic as preview
       const calculatedAmounts = calculateTotalWithGST();
       
-      // Also save to scanner collection for detailed history
+      // Save ONLY to scanner collection - this will automatically appear in transaction list
       const scannerData = {
-        merchantName: editableData.merchant_name || 'Unknown Merchant',
+        merchantName: cleanMerchantName,
         totalAmount: safeParseFloat(editableData.total_amount),
         category: editableData.category || 'Other',
         extractedCategory: extractedData?.category || 'other',
-        date: editableData.date || new Date().toISOString(),
+        date: new Date().toISOString().split('T')[0], // Use current date for financial calculations
         currency: 'INR',
         items: editableData.items || [],
         extractionConfidence: 0.8, // Default confidence
         processingTime: new Date().toISOString(),
         gstAmount: calculatedAmounts.gst,
         subtotalAmount: calculatedAmounts.subtotal,
-        extractedText: `Receipt from ${editableData.merchant_name}`,
-        transactionId: transactionId
-      };      await EnhancedFirebaseService.addScannerExpense(scannerData);
+        extractedText: `Items: ${editableData.items.map((item: any) => item.name).join(', ')}`,
+        type: transactionType
+      };
+      
+      const transactionId = await EnhancedFirebaseService.addScannerExpense(scannerData);
+      
+      console.log('🎯 OCR Expense saved successfully:', {
+        transactionId,
+        merchantName: cleanMerchantName,
+        amount: scannerData.totalAmount,
+        category: scannerData.category,
+        type: transactionType
+      });
       
       setIsSaving(false);
       

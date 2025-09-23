@@ -37,8 +37,6 @@ export class CalendarService {
   // Generate calendar data for a specific month
   static async getCalendarMonth(year: number, month: number): Promise<CalendarMonth> {
     try {
-      console.log('CalendarService: Getting calendar for', year, month);
-      
       // Get start and end dates for the month
       const startDate = new Date(year, month, 1);
       const endDate = new Date(year, month + 1, 0);
@@ -50,15 +48,11 @@ export class CalendarService {
       const calendarEnd = new Date(endDate);
       calendarEnd.setDate(calendarEnd.getDate() + (6 - calendarEnd.getDay()));
 
-      console.log('CalendarService: Date range', calendarStart.toISOString(), 'to', calendarEnd.toISOString());
-
-      // Fetch transactions for the period
+      // Fetch transactions for the period - force fresh data
       const transactions = await EnhancedFirebaseService.getTransactionsByDateRange(
         calendarStart.toISOString(),
         calendarEnd.toISOString()
       );
-
-      console.log('CalendarService: Fetched transactions:', transactions.length, transactions);
 
       // Generate calendar days
       const days: CalendarDay[] = [];
@@ -73,8 +67,6 @@ export class CalendarService {
         const dayTransactions = transactions.filter(transaction => 
           transaction.date.split('T')[0] === dateString
         );
-
-        console.log(`CalendarService: Day ${dateString} has ${dayTransactions.length} transactions:`, dayTransactions);
 
         // Convert transactions to calendar events
         const events: CalendarEvent[] = dayTransactions.map(transaction => ({
@@ -97,8 +89,6 @@ export class CalendarService {
         const dayExpenses = events
           .filter(event => event.type === 'expense')
           .reduce((sum, event) => sum + event.amount, 0);
-
-        console.log(`CalendarService: Day ${dateString} totals - Income: ${dayIncome}, Expenses: ${dayExpenses}`);
 
         // Add to month totals if it's in the current month
         if (currentDate.getMonth() === month) {
