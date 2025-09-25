@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "finze",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true
     },
@@ -41,6 +41,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ee4b8802-86cb-4276-afd4-8ffb78facd2d"
+      }
     }
   }
 }
