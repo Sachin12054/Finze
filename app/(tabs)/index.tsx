@@ -4,41 +4,41 @@ import { useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
-  Platform,
-  RefreshControl,
-  Animated as RNAnimated,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Dimensions,
+    Platform,
+    RefreshControl,
+    Animated as RNAnimated,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import Animated, {
-  FadeInDown,
-  FadeInUp,
-  SlideInRight,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming
+    FadeInDown,
+    FadeInUp,
+    SlideInRight,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming
 } from "react-native-reanimated";
 import Toast from 'react-native-toast-message';
 
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { databaseService } from "../../src/services/databaseService";
 import {
-  Budget as EnhancedBudget,
-  EnhancedFirebaseService,
-  SavingsGoal as EnhancedSavingsGoal,
-  Transaction as EnhancedTransaction
+    Budget as EnhancedBudget,
+    EnhancedFirebaseService,
+    SavingsGoal as EnhancedSavingsGoal,
+    Transaction as EnhancedTransaction
 } from "../../src/services/enhancedFirebaseService";
 import { auth } from "../../src/services/firebase";
 import {
-  AIInsight,
-  UserProfile
+    AIInsight,
+    UserProfile
 } from "../../src/types/database";
 
 // Import hooks
@@ -660,43 +660,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </Animated.View>
-
-        {/* Enhanced Budget Overview */}
-        {budgets.length > 0 && (
-          <Animated.View 
-            entering={FadeInUp.delay(400)} 
-            style={styles.budgetOverviewContainer}
-          >
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Budget Overview</Text>
-              <Text style={styles.sectionSubtitle}>This Month</Text>
-            </View>
-            
-            <View style={styles.budgetCard}>
-              <View style={styles.budgetProgressHeader}>
-                <Text style={styles.budgetProgressLabel}>Spending Progress</Text>
-                <Text style={[
-                  styles.budgetProgressPercentage,
-                  { color: budgetProgress > 90 ? '#EF4444' : budgetProgress > 70 ? '#F59E0B' : '#10B981' }
-                ]}>
-                  {budgetProgress.toFixed(0)}%
-                </Text>
-              </View>
-              
-              <View style={styles.progressBar}>
-                <Animated.View 
-                  style={[
-                    styles.progressFill, 
-                    { 
-                      width: `${Math.min(budgetProgress, 100)}%`,
-                      backgroundColor: budgetProgress > 90 ? '#EF4444' : budgetProgress > 70 ? '#F59E0B' : '#10B981'
-                    }
-                  ]} 
-                />
-              </View>
-            </View>
-          </Animated.View>
-        )}
 
         {/* Enhanced Recent Transactions */}
         <Animated.View 

@@ -5,26 +5,17 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "env": {
-        "EAS_SKIP_AUTO_FINGERPRINT": "1"
-      }
+      "distribution": "internal"
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EAS_SKIP_AUTO_FINGERPRINT": "1"
       }
     },
     "production": {
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EAS_SKIP_AUTO_FINGERPRINT": "1"
       }
     }
   },
