@@ -3,7 +3,7 @@
  * Handles communication with the enhanced backend for receipt scanning and expense management
  */
 
-import { BACKEND_CONFIG, findBestBackendUrl, getDefaultBackendUrl } from '../config/backendConfig';
+import { BACKEND_CONFIG, findBestBackendUrl, getDefaultBackendUrl } from '../../config/backendConfig';
 
 export interface ExtractedDetails {
   total_amount: number;

@@ -1,6 +1,6 @@
 import { FacebookAuthProvider, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
-import { EnhancedFirebaseService } from './enhancedFirebaseService';
-import { auth } from './firebase';
+import { EnhancedFirebaseService } from '../firebase/enhancedFirebaseService';
+import { auth } from '../firebase/firebase';
 
 // Conditional imports for native modules
 let GoogleSignin: any;

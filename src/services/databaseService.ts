@@ -26,7 +26,7 @@ import {
   UserDocument,
   UserProfile
 } from '../types/database';
-import { auth, db } from './firebase';
+import { auth, db } from './firebase/firebase';
 
 // Helper function to generate UUID
 const generateId = () => {

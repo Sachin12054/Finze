@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
-import { EnhancedFirebaseService } from '../services/enhancedFirebaseService';
+import { EnhancedFirebaseService } from '../services/firebase/enhancedFirebaseService';
 
 const { width } = Dimensions.get('window');
 

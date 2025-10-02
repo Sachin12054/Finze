@@ -2,15 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import AICategorizationService, { SmartSuggestion, SpendingInsight } from '../services/aiCategorizationService';
+import AICategorizationService, { SmartSuggestion, SpendingInsight } from '../services/ml/aiCategorizationService';
 
 interface SmartSuggestionsProps {
   visible: boolean;

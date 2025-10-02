@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInRight } from 'react-native-reanimated';
-import { Budget, EnhancedFirebaseService, Transaction } from '../../services/enhancedFirebaseService';
+import { Budget, EnhancedFirebaseService, Transaction } from '../../services/firebase/enhancedFirebaseService';
 
 interface BudgetTabProps {
   budgets: Budget[];

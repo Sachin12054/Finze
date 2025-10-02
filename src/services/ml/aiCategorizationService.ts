@@ -3,13 +3,13 @@
  * Advanced ML-powered expense categorization and financial insights
  */
 
-import { ExpenseWithType, SetGoal } from '../types/database';
+import { ExpenseWithType, SetGoal } from '../../types/database';
 import {
-    getAllExpenses,
-    getBudgets,
-    getCurrentUserId,
-    getSetGoals
-} from './databaseService';
+  getAllExpenses,
+  getBudgets,
+  getCurrentUserId,
+  getSetGoals
+} from '../databaseService';
 
 export interface CategorySuggestion {
   category: string;
@@ -413,7 +413,7 @@ class AICategorization {
       
       // Get budgets using callback (convert to promise for this function)
       const budgets = await new Promise<any[]>((resolve) => {
-        getBudgets(userId, (budgetData) => {
+        getBudgets(userId, (budgetData: any) => {
           resolve(budgetData);
         });
       });
@@ -421,8 +421,8 @@ class AICategorization {
       // Budget alerts
       for (const budget of budgets) {
         const categorySpending = expenses
-          .filter(expense => expense.category === budget.category)
-          .reduce((sum, expense) => sum + expense.amount, 0);
+          .filter((expense: any) => expense.category === budget.category)
+          .reduce((sum: any, expense: any) => sum + expense.amount, 0);
         
         const percentageUsed = (categorySpending / (budget.budget_amount || budget.amount || 1)) * 100;
         
@@ -495,7 +495,7 @@ class AICategorization {
 
       // Goal recommendations
       const goals = await new Promise<SetGoal[]>((resolve) => {
-        getSetGoals(userId, (goalsData) => {
+        getSetGoals(userId, (goalsData: any) => {
           resolve(goalsData);
         });
       });

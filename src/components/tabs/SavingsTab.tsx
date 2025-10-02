@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
-import { SavingsGoal } from '../../services/enhancedFirebaseService';
+import { SavingsGoal } from '../../services/firebase/enhancedFirebaseService';
 
 interface SavingsTabProps {
   savingsGoals: SavingsGoal[];

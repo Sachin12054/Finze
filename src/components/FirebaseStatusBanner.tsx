@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { auth } from '../services/firebase';
-import { checkFirebaseStatus, FirebaseStatus, getFirebaseSetupMessage } from '../services/firebaseStatus';
+import { auth } from '../services/firebase/firebase';
+import { checkFirebaseStatus, FirebaseStatus, getFirebaseSetupMessage } from '../services/firebase/firebaseStatus';
 
 interface FirebaseStatusBannerProps {
   onDismiss?: () => void;

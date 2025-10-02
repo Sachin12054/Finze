@@ -1,4 +1,4 @@
-import { auth, storage } from './firebase';
+import { auth, storage } from './firebase/firebase';
 
 // Test Firebase Storage connection
 export const testStorageConnection = async (): Promise<boolean> => {

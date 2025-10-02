@@ -34,7 +34,7 @@ import Animated, {
   withSpring
 } from "react-native-reanimated";
 import { databaseService } from "../src/services/databaseService";
-import { auth } from "../src/services/firebase";
+import { auth } from "../src/services/firebase/firebase";
 import { deleteProfileImage, generatePlaceholderAvatar, UploadProgress } from "../src/services/imageUploadService";
 import NotificationService from "../src/services/notificationService";
 

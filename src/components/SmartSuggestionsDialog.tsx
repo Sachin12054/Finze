@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Modal from 'react-native-modal';
-import { aiCategorizationService, ExpenseForCategorization } from '../services/aiCategorizationService';
 import { LegacyExpense } from '../services/legacyAdapterService';
+import { aiCategorizationService, ExpenseForCategorization } from '../services/ml/aiCategorizationService';
 
 interface SmartSuggestionDialogProps {
   open: boolean;

@@ -3,7 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { BounceIn, FadeInRight } from 'react-native-reanimated';
-import { EnhancedFirebaseService, Recurrence } from '../../services/enhancedFirebaseService';
+import { EnhancedFirebaseService, Recurrence } from '../../services/firebase/enhancedFirebaseService';
 
 interface RecurringTabProps {
   recurrences: Recurrence[];

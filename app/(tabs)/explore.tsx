@@ -30,7 +30,7 @@ import { AddSavingsGoalDialog } from '../../src/components/AddSavingsGoalDialog'
 import { RecurringTab } from '../../src/components/tabs/RecurringTab';
 import { SavingsTab } from '../../src/components/tabs/SavingsTab';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import { auth, db } from '../../src/services/firebase';
+import { auth, db } from '../../src/services/firebase/firebase';
 
 // Import Enhanced BudgetTab component
 import { BudgetTab } from '../../src/components/tabs/BudgetTab';
@@ -42,7 +42,7 @@ import {
   SavingsGoal as FirebaseSavingsGoal,
   Recurrence,
   Transaction
-} from '../../src/services/enhancedFirebaseService';
+} from '../../src/services/firebase/enhancedFirebaseService';
 
 
 

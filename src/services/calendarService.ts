@@ -1,4 +1,4 @@
-import { EnhancedFirebaseService } from './enhancedFirebaseService';
+import { EnhancedFirebaseService } from './firebase/enhancedFirebaseService';
 
 export interface CalendarEvent {
   id: string;

@@ -6,13 +6,20 @@
 const fs = require('fs');
 const path = require('path');
 
+// Get the project root directory (two levels up from this script)
+const projectRoot = path.resolve(__dirname, '..', '..');
+
 function checkFileExists(filePath) {
-  return fs.existsSync(filePath);
+  // Convert relative path to absolute from project root
+  const absolutePath = path.resolve(projectRoot, filePath);
+  return fs.existsSync(absolutePath);
 }
 
 function readFileContent(filePath) {
   try {
-    return fs.readFileSync(filePath, 'utf8');
+    // Convert relative path to absolute from project root
+    const absolutePath = path.resolve(projectRoot, filePath);
+    return fs.readFileSync(absolutePath, 'utf8');
   } catch (error) {
     return null;
   }
@@ -31,10 +38,10 @@ function testDatabaseStructure() {
   console.log('1. Testing Core File Structure...');
   
   const coreFiles = [
-    './src/services/firebase.ts',
+    './src/services/firebase/firebase.ts',
     './src/services/databaseService.ts',
     './src/types/database.ts',
-    './src/services/authService.ts',
+    './src/services/auth/authService.ts',
     './firestore.rules'
   ];
   
@@ -52,8 +59,8 @@ function testDatabaseStructure() {
   console.log('\n2. Testing Specialized Services...');
   
   const specializedServices = [
-    './src/services/aiCategorizationService.ts',
-    './src/services/receiptScannerService.ts'
+    './src/services/ml/aiCategorizationService.ts',
+    './src/services/ml/receiptScannerService.ts'
   ];
   
   specializedServices.forEach(file => {
@@ -89,7 +96,6 @@ function testDatabaseStructure() {
   
   const backendServices = [
     './Backend/services/firestore_service.py',
-    './Backend/combined_server.py',
     './Backend/app.py'
   ];
   

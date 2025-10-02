@@ -8,7 +8,13 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "validate": "node ./tools/validation/validate_structure.js",
+    "validate-calendar": "node ./tools/validation/validate_calendar.js",
+    "validate-final": "node ./tools/validation/validate-final.js",
+    "debug-firebase": "node ./tools/debug/debug-firebase.js",
+    "debug-calendar": "node ./tools/debug/debug_calendar.js",
+    "deploy-firebase": "./tools/deployment/deploy-firebase-rules.bat"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

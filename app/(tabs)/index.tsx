@@ -4,41 +4,41 @@ import { useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Dimensions,
-    Platform,
-    RefreshControl,
-    Animated as RNAnimated,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Dimensions,
+  Platform,
+  RefreshControl,
+  Animated as RNAnimated,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import Animated, {
-    FadeInDown,
-    FadeInUp,
-    SlideInRight,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-    withTiming
+  FadeInDown,
+  FadeInUp,
+  SlideInRight,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming
 } from "react-native-reanimated";
 import Toast from 'react-native-toast-message';
 
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { databaseService } from "../../src/services/databaseService";
 import {
-    Budget as EnhancedBudget,
-    EnhancedFirebaseService,
-    SavingsGoal as EnhancedSavingsGoal,
-    Transaction as EnhancedTransaction
-} from "../../src/services/enhancedFirebaseService";
-import { auth } from "../../src/services/firebase";
+  Budget as EnhancedBudget,
+  EnhancedFirebaseService,
+  SavingsGoal as EnhancedSavingsGoal,
+  Transaction as EnhancedTransaction
+} from "../../src/services/firebase/enhancedFirebaseService";
+import { auth } from "../../src/services/firebase/firebase";
 import {
-    AIInsight,
-    UserProfile
+  AIInsight,
+  UserProfile
 } from "../../src/types/database";
 
 // Import hooks

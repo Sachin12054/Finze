@@ -2,25 +2,25 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Dimensions,
-    LayoutAnimation,
-    Modal,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  LayoutAnimation,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
-import { EnhancedFirebaseService } from '../services/enhancedFirebaseService';
-import { auth } from '../services/firebase';
-import { receiptScannerService } from '../services/receiptScannerService';
+import { EnhancedFirebaseService } from '../services/firebase/enhancedFirebaseService';
+import { auth } from '../services/firebase/firebase';
+import { receiptScannerService } from '../services/ml/receiptScannerService';
 import { ExtractedDetails } from '../types/expense';
 
 // Static variable to track if backend status has been logged

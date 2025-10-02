@@ -2,19 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { EnhancedFirebaseService, SavingsGoal } from '../services/enhancedFirebaseService';
+import { EnhancedFirebaseService, SavingsGoal } from '../services/firebase/enhancedFirebaseService';
 
 interface AddSavingsGoalDialogProps {
   visible: boolean;

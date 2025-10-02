@@ -14,8 +14,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import ExpoGoSocialAuthService from '../../src/services/expoGoSocialAuthService';
-import SocialAuthService from '../../src/services/socialAuthService';
+import ExpoGoSocialAuthService from '../../src/services/auth/expoGoSocialAuthService';
+import SocialAuthService from '../../src/services/auth/socialAuthService';
 
 const { width, height } = Dimensions.get('window');
 

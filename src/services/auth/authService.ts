@@ -7,8 +7,8 @@ import {
   updateProfile,
   User
 } from 'firebase/auth';
-import { createUser, updateUserProfile } from './databaseService';
-import { auth } from './firebase';
+import { createUser, updateUserProfile } from '../databaseService';
+import { auth } from '../firebase/firebase';
 
 export interface AuthUser {
   uid: string;

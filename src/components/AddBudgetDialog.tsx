@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import Animated, { BounceIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { EnhancedFirebaseService } from '../services/enhancedFirebaseService';
+import { EnhancedFirebaseService } from '../services/firebase/enhancedFirebaseService';
 
 interface AddBudgetDialogProps {
   visible: boolean;
