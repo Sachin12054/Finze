@@ -1,17 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    Modal,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Animated,
+  Dimensions,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
@@ -129,23 +129,24 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
 
   // Animations
   useEffect(() => {
+    console.log('TransactionHistory: open state changed to', open);
     if (open) {
       Animated.parallel([
         Animated.spring(slideAnimation, {
           toValue: 1,
           useNativeDriver: true,
-          tension: 100,
+          tension: 120,
           friction: 8,
         }),
         Animated.spring(scaleAnimation, {
           toValue: 1,
           useNativeDriver: true,
-          tension: 100,
+          tension: 120,
           friction: 8,
         }),
         Animated.timing(opacityAnimation, {
           toValue: 1,
-          duration: 300,
+          duration: 200,
           useNativeDriver: true,
         }),
       ]).start();
@@ -153,17 +154,17 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       Animated.parallel([
         Animated.timing(slideAnimation, {
           toValue: 0,
-          duration: 250,
+          duration: 200,
           useNativeDriver: true,
         }),
         Animated.timing(scaleAnimation, {
-          toValue: 0.8,
-          duration: 250,
+          toValue: 0.9,
+          duration: 200,
           useNativeDriver: true,
         }),
         Animated.timing(opacityAnimation, {
           toValue: 0,
-          duration: 250,
+          duration: 200,
           useNativeDriver: true,
         }),
       ]).start();
@@ -330,16 +331,22 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   };
 
   const handleClose = () => {
+    console.log('TransactionHistory: handleClose called');
     onOpenChange(false);
   };
 
+  console.log('TransactionHistory render: open =', open, 'expenses count =', expenses.length);
+
+  if (!open) return null;
+
   return (
     <Modal
-      visible={open}
+      visible={true}
       transparent={true}
-      animationType="none"
+      animationType="slide"
       onRequestClose={handleClose}
       statusBarTranslucent
+      presentationStyle="overFullScreen"
     >
       <StatusBar barStyle="light-content" backgroundColor={colors.overlay} />
       <Animated.View 
@@ -361,7 +368,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
                   {
                     translateY: slideAnimation.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [height * 0.8, 0],
+                      outputRange: [height * 0.3, 0],
                     }),
                   },
                   { scale: scaleAnimation },

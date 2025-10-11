@@ -5,7 +5,7 @@
 
 // Backend URL options in order of preference
 const BACKEND_URLS = [
-  'https://finze-backend-fnah.onrender.com/api',  // Render production deployment (primary)
+  'http://10.12.228.72:8001/api',  // Render production deployment (primary)
   'http://10.195.3.148:8001/api',  // Network IP (for physical devices)
   'http://localhost:8001/api',      // Localhost (for web/desktop)
   'http://127.0.0.1:8001/api',     // Loopback (backup)

@@ -4,41 +4,41 @@ import { useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
-  Platform,
-  RefreshControl,
-  Animated as RNAnimated,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Dimensions,
+    Platform,
+    RefreshControl,
+    Animated as RNAnimated,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import Animated, {
-  FadeInDown,
-  FadeInUp,
-  SlideInRight,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming
+    FadeInDown,
+    FadeInUp,
+    SlideInRight,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming
 } from "react-native-reanimated";
 import Toast from 'react-native-toast-message';
 
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { databaseService } from "../../src/services/databaseService";
 import {
-  Budget as EnhancedBudget,
-  EnhancedFirebaseService,
-  SavingsGoal as EnhancedSavingsGoal,
-  Transaction as EnhancedTransaction
+    Budget as EnhancedBudget,
+    EnhancedFirebaseService,
+    SavingsGoal as EnhancedSavingsGoal,
+    Transaction as EnhancedTransaction
 } from "../../src/services/firebase/enhancedFirebaseService";
 import { auth } from "../../src/services/firebase/firebase";
 import {
-  AIInsight,
-  UserProfile
+    AIInsight,
+    UserProfile
 } from "../../src/types/database";
 
 // Import hooks
@@ -46,6 +46,7 @@ import { useToast } from '../../src/hooks/useToast';
 
 // Import components
 import AddExpenseDialog from '../../src/components/AddExpenseDialog';
+import { AIInsightsScreen } from '../../src/components/AIInsightsScreen';
 import { CalendarComponent } from '../../src/components/CalendarComponent';
 import { FirebaseStatusBanner } from '../../src/components/FirebaseStatusBanner';
 import { ProfileDialog } from '../../src/components/ProfileDialog';
@@ -126,8 +127,14 @@ export default function HomeScreen() {
   const [showHistory, setShowHistory] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showSmartSuggestions, setShowSmartSuggestions] = useState(false);
+  const [showAIInsights, setShowAIInsights] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
+
+  // Debug: Log state changes
+  useEffect(() => {
+    console.log('HomeScreen state: showScanner =', showScanner, 'showHistory =', showHistory);
+  }, [showScanner, showHistory]);
 
   // Generate styles based on theme
   const styles = getStyles(isDarkTheme);
@@ -586,7 +593,10 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={styles.essentialActionCard}
-              onPress={() => setShowScanner(true)}
+              onPress={() => {
+                console.log('Scanner button pressed');
+                setShowScanner(true);
+              }}
               accessibilityLabel="Scan receipt"
               activeOpacity={0.7}
             >
@@ -601,7 +611,10 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={styles.essentialActionCard}
-              onPress={() => setShowHistory(true)}
+              onPress={() => {
+                console.log('Transaction history button pressed');
+                setShowHistory(true);
+              }}
               accessibilityLabel="Transaction history"
               activeOpacity={0.7}
             >
@@ -631,7 +644,7 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={styles.essentialActionCard}
-              onPress={() => setShowSmartSuggestions(true)}
+              onPress={() => setShowAIInsights(true)}
               accessibilityLabel="AI insights"
               activeOpacity={0.7}
             >
@@ -640,7 +653,7 @@ export default function HomeScreen() {
                   <Ionicons name="bulb" size={26} color="#9333EA" />
                 </View>
                 <Text style={styles.essentialActionTitle}>AI Insights</Text>
-                <Text style={styles.essentialActionSubtitle}>Smart tips</Text>
+                <Text style={styles.essentialActionSubtitle}>Smart Analytics</Text>
               </View>
             </TouchableOpacity>
 
@@ -768,7 +781,10 @@ export default function HomeScreen() {
 
       <TransactionHistory
         open={showHistory}
-        onOpenChange={setShowHistory}
+        onOpenChange={(open) => {
+          console.log('TransactionHistory onOpenChange called with:', open);
+          setShowHistory(open);
+        }}
         expenses={transactions.map(t => ({
           id: t.id || '',
           title: t.title || t.description || 'Transaction',
@@ -788,8 +804,12 @@ export default function HomeScreen() {
 
       <ScannerDialog
         open={showScanner}
-        onOpenChange={setShowScanner}
+        onOpenChange={(open) => {
+          console.log('ScannerDialog onOpenChange called with:', open);
+          setShowScanner(open);
+        }}
         onScanResult={(result: any) => {
+          console.log('ScannerDialog onScanResult called');
           setShowScanner(false);
           toast({
             title: "Receipt scanned!",
@@ -808,6 +828,11 @@ export default function HomeScreen() {
       <SmartSuggestionsComponent
         visible={showSmartSuggestions}
         onClose={() => setShowSmartSuggestions(false)}
+      />
+
+      <AIInsightsScreen
+        isVisible={showAIInsights}
+        onClose={() => setShowAIInsights(false)}
       />
 
       {user && (

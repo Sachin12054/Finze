@@ -1,0 +1,176 @@
+# Firebase Rules Deployment Guide
+
+## Issue
+The Firebase CLI authentication is not working properly, preventing automatic deployment of Firestore security rules.
+
+## Manual Deployment Steps
+
+1. **Open Firebase Console**
+   - Go to https://console.firebase.google.com/
+   - Select project: `finze-d5d1c`
+
+2. **Navigate to Firestore Rules**
+   - Click on "Firestore Database" in the left sidebar
+   - Click on the "Rules" tab
+
+3. **Update Rules**
+   - Copy the content from `firestore.rules` file
+   - Paste it into the online editor
+   - Click "Publish" to deploy the rules
+
+## Current Rules Content
+```plaintext
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection - users can only access their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Profile subcollection
+      match /profile/{profileId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // General expenses subcollection (main expenses collection)
+      match /expenses/{expenseId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Transactions subcollection (main collection for all transactions)
+      match /transactions/{transactionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Budget subcollection (primary)
+      match /budget/{budgetId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Budgets subcollection (alternative naming)
+      match /budgets/{budgetId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Recurrence subcollection (FIXED PATH)
+      match /recurrence/{recurrenceId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Set goal subcollection (FIXED PATH)
+      match /setgoal/{goalId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Goals subcollection (alternative naming)
+      match /goals/{goalId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Recurring subcollection (alternative naming)
+      match /recurring/{recurrenceId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Smart suggestions subcollection
+      match /smart_suggestions/{suggestionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Transaction history subcollection
+      match /transaction_history/{transactionId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // AI insights subcollection
+      match /ai_insights/{insightId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // AI Insights subcollection (alternative naming)
+      match /aiInsights/{insightId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Manual expenses subcollection
+      match /expenses/manual/{expenseId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // AI categorized expenses subcollection
+      match /expenses/ai_categorise/{expenseId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Scanner expenses subcollection
+      match /expenses/scanner/{expenseId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Scanner expenses subcollection (direct path)
+      match /scanner_expenses/{expenseId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Global access collections for authenticated users
+    match /expenses/{document} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.user_id == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.user_id == request.auth.uid;
+      allow list: if request.auth != null;
+    }
+    
+    match /budgets/{document} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.user_id == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.user_id == request.auth.uid;
+      allow list: if request.auth != null;
+    }
+    
+    match /transactions_history/{document} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.user_id == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.user_id == request.auth.uid;
+      allow list: if request.auth != null;
+    }
+    
+    match /smart_suggestions/{document} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.user_id == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.user_id == request.auth.uid;
+      allow list: if request.auth != null;
+    }
+    
+    match /user_summaries/{document} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.user_id == request.auth.uid);
+      allow create: if request.auth != null && 
+        request.resource.data.user_id == request.auth.uid;
+      allow list: if request.auth != null;
+    }
+    
+    // Allow authenticated users to read and write their own data
+    match /{document=**} {
+      allow read, write: if request.auth != null && 
+        (resource == null || 
+         resource.data.user_id == request.auth.uid ||
+         resource.data.userId == request.auth.uid);
+    }
+  }
+}
+```
+
+## Verification
+After deploying the rules, the "Missing or insufficient permissions" error should be resolved.
+
+## Alternative CLI Fix
+If you want to fix the CLI authentication:
+1. Run `firebase logout`
+2. Run `firebase login`
+3. Select the correct Google account
+4. Try `firebase deploy --only firestore:rules` again

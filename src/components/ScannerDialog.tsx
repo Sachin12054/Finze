@@ -2,19 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  LayoutAnimation,
-  Modal,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    LayoutAnimation,
+    Modal,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
@@ -215,24 +215,26 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
     processing_time: new Date().toISOString(),
   };
 
+  // Animations
   useEffect(() => {
+    console.log('ScannerDialog: open state changed to', open);
     if (open) {
       Animated.parallel([
         Animated.spring(slideAnimation, {
           toValue: 1,
           useNativeDriver: true,
-          tension: 100,
+          tension: 120,
           friction: 8,
         }),
         Animated.spring(scaleAnimation, {
           toValue: 1,
           useNativeDriver: true,
-          tension: 100,
+          tension: 120,
           friction: 8,
         }),
         Animated.timing(opacityAnimation, {
           toValue: 1,
-          duration: 300,
+          duration: 200,
           useNativeDriver: true,
         }),
       ]).start();
@@ -240,17 +242,17 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
       Animated.parallel([
         Animated.timing(slideAnimation, {
           toValue: 0,
-          duration: 250,
+          duration: 200,
           useNativeDriver: true,
         }),
         Animated.timing(scaleAnimation, {
-          toValue: 0.8,
-          duration: 250,
+          toValue: 0.9,
+          duration: 200,
           useNativeDriver: true,
         }),
         Animated.timing(opacityAnimation, {
           toValue: 0,
-          duration: 250,
+          duration: 200,
           useNativeDriver: true,
         }),
       ]).start();
@@ -565,7 +567,7 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         // No fixed aspect ratio - allows free cropping for any receipt size
         quality: 0.8,
@@ -622,34 +624,41 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
   };
 
   const handleClose = () => {
+    console.log('ScannerDialog: handleClose called, isProcessing:', isProcessing);
     if (!isProcessing) {
       onOpenChange(false);
     }
   };
 
+  console.log('ScannerDialog render: open =', open);
+
+  if (!open) return null;
+
   return (
     <Modal
-      visible={open}
+      visible={true}
       transparent={true}
-      animationType="none"
-    onRequestClose={handleClose}
-    statusBarTranslucent
-  >
-    <Animated.View style={[styles.overlay, { opacity: opacityAnimation }]}>
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <Animated.View
-          style={[
-            styles.container,
-            { backgroundColor: colors.background },
-            {
-              transform: [
-                { translateY: slideAnimation.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }) },
-                { scale: scaleAnimation }
-              ]
-            }
-          ]}
-        >
+      animationType="slide"
+      onRequestClose={handleClose}
+      statusBarTranslucent
+      presentationStyle="overFullScreen"
+    >
+      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
+        <SafeAreaView style={styles.safeArea}>
+          <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+          <Animated.View
+            style={[
+              styles.container,
+              { backgroundColor: colors.background },
+              {
+                opacity: opacityAnimation,
+                transform: [
+                  { translateY: slideAnimation.interpolate({ inputRange: [0, 1], outputRange: [height * 0.3, 0] }) },
+                  { scale: scaleAnimation }
+                ]
+              }
+            ]}
+          >
           {/* Modern Header */}
           <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
             <View style={styles.headerTopRow}>
@@ -995,7 +1004,7 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
             </ScrollView>
           </Animated.View>
         </SafeAreaView>
-      </Animated.View>
+      </View>
     </Modal>
   );
 };

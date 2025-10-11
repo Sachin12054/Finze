@@ -1,22 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as LocalAuthentication from "expo-local-authentication";
 import { useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    KeyboardAvoidingView,
+    Platform,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/contexts/ThemeContext';
@@ -32,7 +30,6 @@ export default function Login() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [isBiometricAvailable, setIsBiometricAvailable] = useState(false);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -43,8 +40,6 @@ export default function Login() {
   const themeToggleRotate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    checkBiometricAvailability();
-    
     Animated.parallel([
       Animated.timing(fadeAnim, { 
         toValue: 1, 
@@ -58,13 +53,6 @@ export default function Login() {
       })
     ]).start();
   }, []);
-
-  const checkBiometricAvailability = async () => {
-    const compatible = await LocalAuthentication.hasHardwareAsync();
-    const enrolled = await LocalAuthentication.isEnrolledAsync();
-    const savedEmail = await SecureStore.getItemAsync("biometricEmail");
-    setIsBiometricAvailable(compatible && enrolled && !!savedEmail);
-  };
 
   const validate = () => {
     let emailError = "";
@@ -106,8 +94,6 @@ export default function Login() {
     setLoading(true);
     try {
       await AuthService.signIn(email.trim(), password);
-      await SecureStore.setItemAsync("biometricEmail", email.trim());
-      await SecureStore.setItemAsync("biometricPassword", password);
       
       // Success animation
       Animated.timing(buttonScale, {
@@ -127,34 +113,6 @@ export default function Login() {
 
   const handleForgotPassword = async () => {
     router.push('/auth/forgot-password' as any);
-  };
-
-  const handleBiometricLogin = async () => {
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Sign in with biometrics",
-        cancelLabel: "Cancel",
-        fallbackLabel: "Use Password"
-      });
-      
-      if (result.success) {
-        const savedEmail = await SecureStore.getItemAsync("biometricEmail");
-        const savedPass = await SecureStore.getItemAsync("biometricPassword");
-        
-        if (savedEmail && savedPass) {
-          try {
-            await AuthService.signIn(savedEmail, savedPass);
-            router.replace("/(tabs)");
-          } catch {
-            Alert.alert("Authentication Error", "Stored credentials are invalid. Please login manually.");
-          }
-        } else {
-          Alert.alert("No Saved Credentials", "Please login manually first to enable biometric authentication.");
-        }
-      }
-    } catch (error) {
-      Alert.alert("Biometric Error", "Failed to authenticate with biometrics");
-    }
   };
 
   const animatePress = (callback: () => void) => {
@@ -367,26 +325,6 @@ export default function Login() {
                   )}
                 </TouchableOpacity>
               </Animated.View>
-
-              {/* Biometric Login */}
-              {isBiometricAvailable && (
-                <View style={styles.biometricContainer}>
-                  <View style={styles.divider}>
-                    <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>or</Text>
-                    <View style={styles.dividerLine} />
-                  </View>
-                  
-                  <TouchableOpacity 
-                    style={styles.biometricButton} 
-                    onPress={handleBiometricLogin}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="finger-print" size={24} color="#007AFF" />
-                    <Text style={styles.biometricButtonText}>Sign in with Biometrics</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
             </View>
 
             {/* Bottom Section */}
@@ -580,42 +518,6 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "600",
-    marginLeft: 8,
-  },
-  biometricContainer: {
-    marginTop: 20,
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 16,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E5E7EB",
-  },
-  dividerText: {
-    color: "#9CA3AF",
-    fontSize: 13,
-    paddingHorizontal: 12,
-    fontWeight: "500",
-  },
-  biometricButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F0F9FF",
-    borderWidth: 1.5,
-    borderColor: "#007AFF",
-    borderRadius: 12,
-    paddingVertical: 12,
-    minHeight: 48,
-  },
-  biometricButtonText: {
-    color: "#007AFF",
     fontSize: 15,
     fontWeight: "600",
     marginLeft: 8,

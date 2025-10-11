@@ -2,25 +2,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  onSnapshot,
-  query,
-  updateDoc
+    collection,
+    deleteDoc,
+    doc,
+    limit,
+    onSnapshot,
+    query,
+    updateDoc
 } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,6 +30,7 @@ import { AddSavingsGoalDialog } from '../../src/components/AddSavingsGoalDialog'
 import { RecurringTab } from '../../src/components/tabs/RecurringTab';
 import { SavingsTab } from '../../src/components/tabs/SavingsTab';
 import { useTheme } from '../../src/contexts/ThemeContext';
+import { AIInsightsData, aiInsightsService } from '../../src/services/aiInsightsService';
 import { auth, db } from '../../src/services/firebase/firebase';
 
 // Import Enhanced BudgetTab component
@@ -37,11 +38,11 @@ import { BudgetTab } from '../../src/components/tabs/BudgetTab';
 
 // Import Enhanced Firebase Service for consistent data handling like index.tsx
 import {
-  Budget,
-  EnhancedFirebaseService,
-  SavingsGoal as FirebaseSavingsGoal,
-  Recurrence,
-  Transaction
+    Budget,
+    EnhancedFirebaseService,
+    SavingsGoal as FirebaseSavingsGoal,
+    Recurrence,
+    Transaction
 } from '../../src/services/firebase/enhancedFirebaseService';
 
 
@@ -82,6 +83,8 @@ export default function ExploreDashboard() {
   const [recurringTransactions, setRecurringTransactions] = useState<Recurrence[]>([]);
   const [savingsGoals, setSavingsGoals] = useState<FirebaseSavingsGoal[]>([]);
   const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestion[]>([]);
+  const [aiInsights, setAIInsights] = useState<AIInsightsData | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
   
   // Financial summary
   const [totalBalance, setTotalBalance] = useState(0);
@@ -115,6 +118,28 @@ export default function ExploreDashboard() {
 
     return unsubscribe;
   }, []);
+
+  // Load AI insights
+  const loadAIInsights = async () => {
+    if (!user) return;
+    
+    setInsightsLoading(true);
+    try {
+      const insights = await aiInsightsService.getAIInsights('month');
+      setAIInsights(insights);
+    } catch (error) {
+      console.error('Error loading AI insights:', error);
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
+
+  // Load AI insights when user changes
+  useEffect(() => {
+    if (user) {
+      loadAIInsights();
+    }
+  }, [user]);
 
   const setupRealtimeListeners = (userId: string) => {
     let unsubscribeFunctions: (() => void)[] = [];
@@ -723,6 +748,9 @@ export default function ExploreDashboard() {
             transactions={transactions}
             budgets={budgets}
             isDarkTheme={isDarkTheme}
+            aiInsights={aiInsights}
+            insightsLoading={insightsLoading}
+            onRefreshInsights={loadAIInsights}
           />
         )}
 
@@ -1005,92 +1033,338 @@ function ScannerHistoryTab({ isDarkTheme }: {
 }
 
 // Component: Insights Tab
-function InsightsTab({ suggestions, transactions, budgets, isDarkTheme }: {
+function InsightsTab({ 
+  suggestions, 
+  transactions, 
+  budgets, 
+  isDarkTheme, 
+  aiInsights, 
+  insightsLoading, 
+  onRefreshInsights 
+}: {
   suggestions: SmartSuggestion[];
   transactions: Transaction[];
   budgets: Budget[];
   isDarkTheme: boolean;
+  aiInsights: AIInsightsData | null;
+  insightsLoading: boolean;
+  onRefreshInsights: () => void;
 }) {
-  const totalExpenses = transactions
-    .filter((exp: Transaction) => exp.type === 'expense')
-    .reduce((sum: number, exp: Transaction) => sum + exp.amount, 0);
+  const colors = {
+    background: isDarkTheme ? '#0f172a' : '#ffffff',
+    surface: isDarkTheme ? '#1e293b' : '#f8fafc',
+    primary: '#3b82f6',
+    success: '#10b981',
+    warning: '#f59e0b',
+    error: '#ef4444',
+    text: isDarkTheme ? '#f8fafc' : '#1e293b',
+    textSecondary: isDarkTheme ? '#cbd5e1' : '#64748b',
+    textMuted: isDarkTheme ? '#94a3b8' : '#9ca3af',
+    border: isDarkTheme ? '#374151' : '#e5e7eb'
+  };
 
-  const totalIncome = transactions
-    .filter((exp: Transaction) => exp.type === 'income')
-    .reduce((sum: number, exp: Transaction) => sum + exp.amount, 0);
+  const getHealthScoreColor = (score: number) => {
+    if (score >= 80) return colors.success;
+    if (score >= 60) return colors.warning;
+    return colors.error;
+  };
 
-  const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return colors.error;
+      case 'medium': return colors.warning;
+      default: return colors.success;
+    }
+  };
+
+  if (insightsLoading) {
+    return (
+      <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
+        <View style={styles.loadingInsightsContainer}>
+          <Ionicons name="analytics" size={48} color={colors.primary} />
+          <Text style={[styles.loadingInsightsText, { color: colors.textSecondary }]}>
+            Analyzing your financial data...
+          </Text>
+        </View>
+      </Animated.View>
+    );
+  }
+
+  if (!aiInsights) {
+    return (
+      <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
+        <View style={styles.sectionTitleRow}>
+          <Ionicons name="bulb-outline" size={24} color={colors.text} />
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>AI Insights</Text>
+          <TouchableOpacity onPress={onRefreshInsights} style={styles.refreshInsightsButton}>
+            <Ionicons name="refresh" size={20} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.emptyInsightsState}>
+          <Ionicons name="analytics" size={48} color={colors.textMuted} />
+          <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
+            No insights available yet
+          </Text>
+          <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
+            Add more transactions to get AI-powered insights
+          </Text>
+          <TouchableOpacity 
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            onPress={onRefreshInsights}
+          >
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    );
+  }
 
   return (
     <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
       <View style={styles.sectionTitleRow}>
-        <Ionicons name="bulb-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
-        <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Smart Insights</Text>
+        <Ionicons name="bulb-outline" size={24} color={colors.text} />
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>AI Insights</Text>
+        <TouchableOpacity onPress={onRefreshInsights} style={styles.refreshInsightsButton}>
+          <Ionicons name="refresh" size={20} color={colors.primary} />
+        </TouchableOpacity>
       </View>
       
-      {/* Financial Overview */}
+      {/* Financial Health Card */}
       <LinearGradient
-        colors={['#1f2937', '#374151']}
-        style={styles.insightCard}
+        colors={[colors.primary, '#60a5fa']}
+        style={styles.healthInsightCard}
       >
-        <Text style={styles.insightTitle}>Financial Health Score</Text>
-        <View style={styles.insightRow}>
-          <Text style={styles.insightLabel}>Savings Rate:</Text>
-          <Text style={[
-            styles.insightValue,
-            { color: savingsRate > 20 ? '#10b981' : savingsRate > 10 ? '#f59e0b' : '#ef4444' }
-          ]}>
-            {savingsRate.toFixed(1)}%
+        <View style={styles.healthInsightHeader}>
+          <View style={styles.healthInsightTitleRow}>
+            <Ionicons name="fitness" size={24} color="#ffffff" />
+            <Text style={styles.healthInsightTitle}>Financial Health</Text>
+          </View>
+          <View style={styles.healthInsightScore}>
+            <Text style={styles.healthInsightScoreText}>
+              {aiInsights.financial_health.health_score}
+            </Text>
+          </View>
+        </View>
+        
+        <View style={styles.healthInsightMetrics}>
+          <View style={styles.healthInsightMetric}>
+            <Text style={styles.healthInsightMetricLabel}>Total Spending</Text>
+            <Text style={styles.healthInsightMetricValue}>
+              ₹{aiInsights.financial_health.total_spending.toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.healthInsightMetric}>
+            <Text style={styles.healthInsightMetricLabel}>Avg Transaction</Text>
+            <Text style={styles.healthInsightMetricValue}>
+              ₹{aiInsights.financial_health.average_transaction.toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.healthInsightMetric}>
+            <Text style={styles.healthInsightMetricLabel}>Transactions</Text>
+            <Text style={styles.healthInsightMetricValue}>
+              {aiInsights.financial_health.transaction_count}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.trendInsightIndicator}>
+          <Ionicons
+            name={aiInsights.financial_health.spending_trend === 'increasing' ? 'trending-up' : 
+                 aiInsights.financial_health.spending_trend === 'decreasing' ? 'trending-down' : 'remove'}
+            size={20}
+            color="#ffffff"
+          />
+          <Text style={styles.trendInsightText}>
+            {aiInsights.financial_health.spending_change_percent > 0 ? '+' : ''}{aiInsights.financial_health.spending_change_percent}% from last period
           </Text>
-        </View>
-        <View style={styles.insightRow}>
-          <Text style={styles.insightLabel}>Active Budgets:</Text>
-          <Text style={styles.insightValue}>{budgets.length}</Text>
-        </View>
-        <View style={styles.insightRow}>
-          <Text style={styles.insightLabel}>This Month Transactions:</Text>
-          <Text style={styles.insightValue}>{transactions.length}</Text>
         </View>
       </LinearGradient>
 
-      {/* AI Suggestions */}
-      {suggestions.map((suggestion) => (
-        <LinearGradient
-          key={suggestion.id}
-          colors={['#1f2937', '#374151']}
-          style={[
-            styles.suggestionCard,
-            { borderLeftWidth: 4, borderLeftColor: 
-              suggestion.priority === 'high' ? '#ef4444' :
-              suggestion.priority === 'medium' ? '#f59e0b' : '#10b981'
-            }
-          ]}
-        >
-          <Text style={styles.suggestionTitle}>{suggestion.title}</Text>
-          <Text style={styles.suggestionDescription}>{suggestion.description}</Text>
-          <View style={styles.suggestionFooter}>
-            <Text style={[
-              styles.priorityBadge,
-              { backgroundColor:
-                suggestion.priority === 'high' ? '#ef4444' :
-                suggestion.priority === 'medium' ? '#f59e0b' : '#10b981'
-              }
-            ]}>
-              {suggestion.priority.toUpperCase()}
-            </Text>
-            <Text style={styles.suggestionType}>{suggestion.type}</Text>
-          </View>
-        </LinearGradient>
-      ))}
-      
-      {suggestions.length === 0 && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No insights available yet</Text>
-          <Text style={styles.emptyStateSubtext}>Add more transactions to get AI-powered insights</Text>
+      {/* Spending Insights */}
+      {aiInsights.spending_insights.length > 0 && (
+        <View style={styles.insightsSection}>
+          <Text style={[styles.insightsSectionTitle, { color: colors.text }]}>
+            💡 Spending Insights
+          </Text>
+          {aiInsights.spending_insights.map((insight, index) => (
+            <View key={index} style={[styles.aiInsightCard, { backgroundColor: colors.surface }]}>
+              <View style={styles.aiInsightHeader}>
+                <View style={[
+                  styles.aiInsightPriorityDot, 
+                  { backgroundColor: getPriorityColor(insight.priority) }
+                ]} />
+                <Text style={[styles.aiInsightTitle, { color: colors.text }]}>
+                  {insight.title}
+                </Text>
+                <View style={[
+                  styles.aiInsightPriorityBadge, 
+                  { backgroundColor: getPriorityColor(insight.priority) + '20' }
+                ]}>
+                  <Text style={[
+                    styles.aiInsightPriorityText, 
+                    { color: getPriorityColor(insight.priority) }
+                  ]}>
+                    {insight.priority.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.aiInsightDescription, { color: colors.textSecondary }]}>
+                {insight.description}
+              </Text>
+              <Text style={[styles.aiInsightSuggestion, { color: colors.textMuted }]}>
+                💡 {insight.suggestion}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Smart Suggestions */}
+      {aiInsights.smart_suggestions.length > 0 && (
+        <View style={styles.suggestionsSection}>
+          <Text style={[styles.suggestionsSectionTitle, { color: colors.text }]}>
+            🎯 Smart Suggestions
+          </Text>
+          {aiInsights.smart_suggestions.map((suggestion, index) => (
+            <TouchableOpacity 
+              key={index} 
+              style={[styles.aiSuggestionCard, { backgroundColor: colors.surface }]}
+              onPress={() => {
+                if (suggestion.actionable) {
+                  Alert.alert(
+                    suggestion.title,
+                    suggestion.description + 
+                    (suggestion.suggested_amount ? `\n\nSuggested Amount: ₹${suggestion.suggested_amount}` : ''),
+                    [
+                      { text: 'Dismiss', style: 'cancel' },
+                      { text: 'Take Action', onPress: () => {
+                        console.log('Taking action for:', suggestion.type);
+                      }}
+                    ]
+                  );
+                }
+              }}
+            >
+              <View style={styles.aiSuggestionHeader}>
+                <Ionicons
+                  name={suggestion.type === 'budget_recommendation' ? 'wallet' :
+                       suggestion.type === 'savings_opportunity' ? 'trending-up' :
+                       suggestion.type === 'goal_setting' ? 'flag' : 'bulb'}
+                  size={24}
+                  color={getPriorityColor(suggestion.priority)}
+                />
+                <View style={styles.aiSuggestionTitleContainer}>
+                  <Text style={[styles.aiSuggestionTitle, { color: colors.text }]}>
+                    {suggestion.title}
+                  </Text>
+                  <View style={[
+                    styles.aiSuggestionPriorityBadge, 
+                    { backgroundColor: getPriorityColor(suggestion.priority) + '20' }
+                  ]}>
+                    <Text style={[
+                      styles.aiSuggestionPriorityText, 
+                      { color: getPriorityColor(suggestion.priority) }
+                    ]}>
+                      {suggestion.priority}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <Text style={[styles.aiSuggestionDescription, { color: colors.textSecondary }]}>
+                {suggestion.description}
+              </Text>
+              {suggestion.suggested_amount && (
+                <View style={styles.aiSuggestionAmount}>
+                  <Text style={[styles.aiSuggestionAmountText, { color: colors.primary }]}>
+                    Suggested: ₹{suggestion.suggested_amount.toLocaleString()}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Category Analysis */}
+      {Object.keys(aiInsights.category_analysis).length > 0 && (
+        <View style={styles.categoryAnalysisSection}>
+          <Text style={[styles.categoryAnalysisSectionTitle, { color: colors.text }]}>
+            📊 Category Analysis
+          </Text>
+          {Object.entries(aiInsights.category_analysis)
+            .sort(([_, a], [__, b]) => b.total - a.total)
+            .slice(0, 5)
+            .map(([category, data], index) => (
+              <View key={category} style={[styles.categoryAnalysisCard, { backgroundColor: colors.surface }]}>
+                <View style={styles.categoryAnalysisHeader}>
+                  <Ionicons
+                    name={getCategoryIcon(category)}
+                    size={24}
+                    color={colors.primary}
+                  />
+                  <View style={styles.categoryAnalysisInfo}>
+                    <Text style={[styles.categoryAnalysisName, { color: colors.text }]}>
+                      {category}
+                    </Text>
+                    <Text style={[styles.categoryAnalysisCount, { color: colors.textSecondary }]}>
+                      {data.count} transactions
+                    </Text>
+                  </View>
+                  <Text style={[styles.categoryAnalysisAmount, { color: colors.text }]}>
+                    ₹{data.total.toLocaleString()}
+                  </Text>
+                </View>
+                <View style={styles.categoryAnalysisProgress}>
+                  <View style={[styles.categoryAnalysisProgressBar, { backgroundColor: colors.border }]}>
+                    <View
+                      style={[
+                        styles.categoryAnalysisProgressFill,
+                        { backgroundColor: colors.primary, width: `${Math.min(data.percentage, 100)}%` }
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.categoryAnalysisPercentage, { color: colors.textSecondary }]}>
+                    {data.percentage}%
+                  </Text>
+                </View>
+              </View>
+            ))}
+        </View>
+      )}
+
+      {/* Empty state if no insights */}
+      {aiInsights.spending_insights.length === 0 && 
+       aiInsights.smart_suggestions.length === 0 && 
+       Object.keys(aiInsights.category_analysis).length === 0 && (
+        <View style={styles.emptyInsightsState}>
+          <Ionicons name="analytics" size={48} color={colors.textMuted} />
+          <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
+            No detailed insights available yet
+          </Text>
+          <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
+            Add more transactions to get personalized AI insights
+          </Text>
         </View>
       )}
     </Animated.View>
   );
+
+  // Helper function to get category icon
+  function getCategoryIcon(category: string): any {
+    const iconMap: { [key: string]: string } = {
+      'Food & Dining': 'restaurant',
+      'Transportation': 'car',
+      'Shopping': 'bag',
+      'Entertainment': 'game-controller',
+      'Healthcare': 'medical',
+      'Bills & Utilities': 'flash',
+      'Education': 'school',
+      'Travel': 'airplane',
+      'Other': 'ellipsis-horizontal'
+    };
+    return iconMap[category] || 'ellipsis-horizontal';
+  }
 }
 
 const styles = StyleSheet.create({
@@ -2371,5 +2645,253 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontStyle: 'italic',
+  },
+  
+  // AI Insights Styles
+  loadingInsightsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingInsightsText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  refreshInsightsButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+  },
+  emptyInsightsState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  retryButton: {
+    marginTop: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  healthInsightCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  healthInsightHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  healthInsightTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  healthInsightTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  healthInsightScore: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  healthInsightScoreText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  healthInsightMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  healthInsightMetric: {
+    alignItems: 'center',
+  },
+  healthInsightMetricLabel: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 4,
+  },
+  healthInsightMetricValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  trendInsightIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  trendInsightText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+  },
+  insightsSection: {
+    marginBottom: 20,
+  },
+  insightsSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  aiInsightCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  aiInsightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  aiInsightPriorityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  aiInsightTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  aiInsightPriorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  aiInsightPriorityText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  aiInsightDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  aiInsightSuggestion: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  suggestionsSection: {
+    marginBottom: 20,
+  },
+  suggestionsSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  aiSuggestionCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  aiSuggestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 8,
+  },
+  aiSuggestionTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  aiSuggestionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+    marginRight: 12,
+  },
+  aiSuggestionPriorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  aiSuggestionPriorityText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  aiSuggestionDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  aiSuggestionAmount: {
+    alignItems: 'flex-end',
+  },
+  aiSuggestionAmountText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  categoryAnalysisSection: {
+    marginBottom: 20,
+  },
+  categoryAnalysisSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  categoryAnalysisCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  categoryAnalysisHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  categoryAnalysisInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  categoryAnalysisName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  categoryAnalysisCount: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  categoryAnalysisAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  categoryAnalysisProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  categoryAnalysisProgressBar: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+  },
+  categoryAnalysisProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  categoryAnalysisPercentage: {
+    fontSize: 12,
+    fontWeight: '500',
+    minWidth: 40,
+    textAlign: 'right',
   },
 });

@@ -1,5 +1,7 @@
 // src/services/mlService.ts - Real ML Service for Production
 
+import { getDefaultBackendUrl } from '../../config/backendConfig';
+
 export interface MLPrediction {
   category: string;
   confidence: number;
@@ -41,9 +43,9 @@ export interface OCRResult {
   ml_prediction?: MLPrediction;
 }
 
-const ML_API_BASE_URL = 'https://finze-backend-fnah.onrender.com/api';
+const ML_API_BASE_URL = getDefaultBackendUrl();
 // OCR Service Configuration
-const OCR_BASE_URL = 'https://finze-backend-fnah.onrender.com/api';
+const OCR_BASE_URL = getDefaultBackendUrl();
 
 export class MLService {
   static async categorizeExpense(description: string, amount: number): Promise<MLPrediction> {

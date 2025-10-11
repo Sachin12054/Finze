@@ -120,87 +120,147 @@ class ReceiptScannerService {
    */
   async uploadReceipt(imageUri: string, userId: string = 'anonymous'): Promise<ReceiptScanResponse> {
     try {
+      console.log(`📤 Starting receipt upload for user: ${userId}`);
+      console.log(`🔗 Using backend URL: ${this.baseUrl}`);
+      
+      // First try to initialize with the best backend URL
+      await this.initialize();
+      
       // Check if the service is available first
+      console.log('🔍 Checking backend health...');
       const health = await this.checkHealth();
       if (!health || !health.services.receipt_scanning) {
+        console.error('❌ Receipt scanning service unavailable');
         return {
           status: 'error',
-          error: 'Receipt scanning service is not available. Please check your backend configuration.',
+          error: 'Receipt scanning service is not available. Please check your internet connection and try again.',
         };
       }
+      console.log('✅ Backend services are healthy');
 
       // Create FormData for file upload
       const formData = new FormData();
       
       // Handle different image sources (file picker vs camera)
       if (imageUri.startsWith('data:')) {
-        // Data URL (base64 encoded image)
-        const response = await fetch(imageUri);
-        const blob = await response.blob();
-        formData.append('image', blob, 'receipt.jpg');
+        // Data URL (base64 encoded image) - convert to blob for web compatibility
+        console.log('📷 Processing base64 image...');
+        try {
+          const response = await fetch(imageUri);
+          const blob = await response.blob();
+          formData.append('image', blob, 'receipt.jpg');
+          console.log(`📊 Base64 image converted to blob: ${blob.size} bytes`);
+        } catch (blobError) {
+          console.log('� Base64 blob conversion failed, using direct data URL');
+          // Extract base64 data and create blob manually
+          const base64Data = imageUri.split(',')[1];
+          const binaryString = atob(base64Data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: 'image/jpeg' });
+          formData.append('image', blob, 'receipt.jpg');
+          console.log(`📊 Manual blob created: ${blob.size} bytes`);
+        }
       } else {
-        // File URI
+        // File URI - React Native specific handling
+        console.log('� Processing file URI for React Native...');
+        console.log(`📍 Image URI: ${imageUri}`);
+        
+        // React Native file upload - use the URI directly with proper metadata
         formData.append('image', {
           uri: imageUri,
           type: 'image/jpeg',
           name: 'receipt.jpg',
         } as any);
+        
+        console.log('📊 React Native file object appended to FormData');
       }
       
       formData.append('user_id', userId);
+      console.log(`👤 User ID added to FormData: ${userId}`);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+      const timeoutId = setTimeout(() => {
+        console.log('⏱️ Upload timeout reached');
+        controller.abort();
+      }, this.timeout);
 
-      console.log('Uploading receipt to backend...');
+      console.log('🚀 Uploading receipt to backend...');
+      console.log(`📍 Upload URL: ${this.baseUrl}/upload-receipt`);
+      
+      // Debug FormData contents
+      console.log('🔍 FormData contents:');
+      for (const [key, value] of formData.entries()) {
+        if (typeof value === 'object' && value.constructor.name === 'File') {
+          console.log(`  ${key}: File(${value.name}, ${value.size} bytes, ${value.type})`);
+        } else if (typeof value === 'object' && 'uri' in value) {
+          console.log(`  ${key}: ReactNativeFile(${value.name}, ${value.type})`);
+        } else {
+          console.log(`  ${key}: ${value}`);
+        }
+      }
       
       const response = await fetch(`${this.baseUrl}/upload-receipt`, {
         method: 'POST',
         body: formData,
         headers: {
-          'Content-Type': 'multipart/form-data',
+          // Let browser/React Native set Content-Type with boundary for FormData
+          'Accept': 'application/json',
         },
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
-
-      const result = await response.json();
+      console.log(`📥 Response status: ${response.status}`);
 
       if (!response.ok) {
-        console.error('Receipt upload failed:', response.status, result);
+        const errorText = await response.text();
+        console.error(`❌ Upload failed: ${response.status}`, errorText);
         return {
           status: 'error',
-          error: result.error || `Upload failed with status ${response.status}`,
+          error: `Upload failed: ${response.status} ${response.statusText}. Please check your internet connection.`,
         };
       }
 
+      const result = await response.json();
+      console.log('📋 Response received:', { status: result.status, hasData: !!result.data });
+
       if (result.status === 'success' && result.data) {
-        console.log('Receipt processed successfully:', result.data.merchant_name);
+        console.log('✅ Receipt processed successfully:', result.data.merchant_name || 'Unknown merchant');
         return {
           status: 'success',
           data: this.formatExtractedData(result.data),
           message: result.message,
         };
       } else {
+        console.error('❌ Backend processing failed:', result.error);
         return {
           status: 'error',
           error: result.error || 'Failed to process receipt',
         };
       }
     } catch (error) {
-      console.error('Error uploading receipt:', error);
+      console.error('💥 Error uploading receipt:', error);
       
       if (error instanceof Error && error.name === 'AbortError') {
         return {
           status: 'error',
-          error: 'Request timed out. Please try again with a smaller image.',
+          error: 'Upload timed out. Please check your internet connection and try again.',
+        };
+      }
+      
+      if (error instanceof Error && error.message.includes('Network request failed')) {
+        return {
+          status: 'error',
+          error: 'Network connection failed. Please check your internet connection and backend server status.',
         };
       }
       
       return {
         status: 'error',
-        error: (error instanceof Error ? error.message : String(error)) || 'Network error. Please check your connection and try again.',
+        error: error instanceof Error ? error.message : 'Unknown error occurred during upload',
       };
     }
   }

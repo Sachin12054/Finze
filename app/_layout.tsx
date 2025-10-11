@@ -1,8 +1,9 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Slot, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
 import 'react-native-get-random-values';
 import 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
@@ -10,6 +11,28 @@ import { ThemeProvider as CustomThemeProvider } from '../src/contexts/ThemeConte
 import '../src/utils/consoleSuppressions'; // Import warning suppressions
 
 import { useColorScheme } from '@/hooks/useColorScheme';
+
+// Loading component
+function LoadingScreen() {
+  return (
+    <View style={{ 
+      flex: 1, 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      backgroundColor: '#ffffff' 
+    }}>
+      <ActivityIndicator size="large" color="#007AFF" />
+      <Text style={{ 
+        marginTop: 16, 
+        fontSize: 16, 
+        color: '#666666',
+        fontWeight: '500'
+      }}>
+        Loading Finze...
+      </Text>
+    </View>
+  );
+}
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -20,13 +43,22 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loaded) {
-      setIsReady(true);
+      // Small delay to ensure everything is properly initialized
+      const timer = setTimeout(() => {
+        setIsReady(true);
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
   }, [loaded]);
 
+  // Always wrap in CustomThemeProvider, even during loading
   if (!loaded || !isReady) {
-    // Return a simple loading component to prevent navigation errors
-    return <Slot />;
+    return (
+      <CustomThemeProvider>
+        <LoadingScreen />
+      </CustomThemeProvider>
+    );
   }
 
   return (

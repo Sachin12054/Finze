@@ -1,7 +1,6 @@
 import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { LinearGradient } from "expo-linear-gradient";
-import * as LocalAuthentication from "expo-local-authentication";
 import { useRouter } from "expo-router";
 import { deleteUser, signOut, updatePassword, updateProfile } from "firebase/auth";
 import React, { useEffect, useState } from "react";
@@ -50,7 +49,6 @@ export default function ProfileScreen() {
   const [location, setLocation] = useState("");
   const [website, setWebsite] = useState("");
   const [darkMode, setDarkMode] = useState(false);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [privateAccount, setPrivateAccount] = useState(false);
   const [profilePic, setProfilePic] = useState(
@@ -116,7 +114,6 @@ export default function ProfileScreen() {
           setLocation(""); // location not in new schema
           setWebsite(""); // website not in new schema
           setDarkMode(data.preferences?.theme === 'dark' || false);
-          setBiometricEnabled(false); // biometric not in new schema
           setNotificationsEnabled(data.preferences?.notifications || false);
           setPrivateAccount(false); // private account not in new schema
           if (data.avatar_url) setProfilePic(data.avatar_url);
@@ -395,36 +392,6 @@ export default function ProfileScreen() {
     );
   };
 
-  // Enable biometric authentication
-  const toggleBiometric = async (value: boolean) => {
-    if (value) {
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      
-      if (!hasHardware) {
-        Alert.alert("Not Supported", "Biometric authentication is not available on this device");
-        return;
-      }
-      
-      if (!isEnrolled) {
-        Alert.alert("No Biometrics", "Please set up biometric authentication in your device settings first");
-        return;
-      }
-      
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Enable biometric login",
-        cancelLabel: "Cancel",
-      });
-      
-      if (result.success) {
-        setBiometricEnabled(true);
-        Alert.alert("✅ Success", "Biometric login enabled");
-      }
-    } else {
-      setBiometricEnabled(false);
-    }
-  };
-
   // Share profile
   const shareProfile = async () => {
     try {
@@ -449,7 +416,6 @@ export default function ProfileScreen() {
         location,
         website,
         darkMode,
-        biometricEnabled,
         notificationsEnabled,
         privateAccount,
         exportDate: new Date().toISOString(),
@@ -553,7 +519,6 @@ export default function ProfileScreen() {
           text: "Reset",
           onPress: () => {
             setDarkMode(false);
-            setBiometricEnabled(false);
             setNotificationsEnabled(false);
             setPrivateAccount(false);
             Alert.alert("✅ Settings Reset", "All settings have been reset to default");
@@ -762,19 +727,6 @@ export default function ProfileScreen() {
                 <Ionicons name="chevron-forward" size={16} color="#999" />
               </View>
             </AnimatedTouchable>
-          </Animated.View>
-
-          <Animated.View entering={FadeInDown.delay(700).duration(500)} style={styles.switchContainer}>
-            <View style={styles.switchContent}>
-              <MaterialIcons name="fingerprint" size={20} color={darkMode ? "#4facfe" : "#667eea"} />
-              <Text style={[styles.switchLabel, darkMode && styles.darkText]}>Biometric Login</Text>
-            </View>
-            <Switch 
-              value={biometricEnabled} 
-              onValueChange={toggleBiometric}
-              trackColor={{ false: "#767577", true: "#4facfe" }}
-              thumbColor={biometricEnabled ? "#fff" : "#f4f3f4"}
-            />
           </Animated.View>
 
           <Animated.View entering={FadeInDown.delay(800).duration(500)} style={styles.switchContainer}>

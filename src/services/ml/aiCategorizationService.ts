@@ -3,12 +3,13 @@
  * Advanced ML-powered expense categorization and financial insights
  */
 
+import { getDefaultBackendUrl } from '../../config/backendConfig';
 import { ExpenseWithType, SetGoal } from '../../types/database';
 import {
-  getAllExpenses,
-  getBudgets,
-  getCurrentUserId,
-  getSetGoals
+    getAllExpenses,
+    getBudgets,
+    getCurrentUserId,
+    getSetGoals
 } from '../databaseService';
 
 export interface CategorySuggestion {
@@ -69,8 +70,8 @@ class AICategorization {
   private baseUrl: string;
   private timeout: number;
 
-  constructor(baseUrl: string = 'https://finze-backend-fnah.onrender.com/api') {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl?: string) {
+    this.baseUrl = baseUrl || getDefaultBackendUrl();
     this.timeout = 10000; // 10 seconds
   }
 
