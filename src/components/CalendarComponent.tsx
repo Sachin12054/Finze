@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     FlatList,
     Modal,
@@ -11,21 +12,61 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useTheme } from '../contexts/ThemeContext';
 import { CalendarDay, CalendarEvent, CalendarMonth, CalendarService } from '../services/calendarService';
+import { TransactionCard, TransactionCardData } from './TransactionCard';
 
 interface CalendarComponentProps {
   visible: boolean;
   onClose: () => void;
+  refreshTrigger?: number;
 }
 
 export const CalendarComponent: React.FC<CalendarComponentProps> = ({
   visible,
   onClose,
+  refreshTrigger = 0,
 }) => {
+  // Theme context
+  const { isDarkTheme } = useTheme();
+  
+  // Theme-aware colors
+  const getThemeColors = () => ({
+    background: isDarkTheme ? '#1e293b' : '#ffffff',
+    surface: isDarkTheme ? '#334155' : '#f8fafc',
+    text: isDarkTheme ? '#f1f5f9' : '#1e293b',
+    textSecondary: isDarkTheme ? '#94a3b8' : '#64748b',
+    border: isDarkTheme ? '#475569' : '#e2e8f0',
+    overlay: isDarkTheme ? 'rgba(0, 0, 0, 0.95)' : 'rgba(0, 0, 0, 0.9)',
+    inputBackground: isDarkTheme ? '#475569' : '#ffffff',
+    placeholder: isDarkTheme ? '#64748b' : '#94a3b8',
+    primary: isDarkTheme ? '#60a5fa' : '#3b82f6',
+    success: isDarkTheme ? '#34d399' : '#10b981',
+    error: isDarkTheme ? '#fb7185' : '#ef4444',
+    warning: isDarkTheme ? '#fbbf24' : '#f59e0b',
+    primarySurface: isDarkTheme ? '#1e40af' : '#eff6ff',
+    successSurface: isDarkTheme ? '#064e3b' : '#f0fdf4',
+    errorSurface: isDarkTheme ? '#7f1d1d' : '#fef2f2',
+    cardBackground: isDarkTheme ? '#374151' : '#ffffff',
+    cardBorder: isDarkTheme ? '#475569' : '#f1f5f9',
+    headerGradient: isDarkTheme ? ['#475569', '#64748b'] as const : ['#6366F1', '#8B5CF6'] as const,
+  });
+
+  const colors = getThemeColors();
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarData, setCalendarData] = useState<CalendarMonth | null>(null);
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
   const [loading, setLoading] = useState(false);
+  const [lastRefreshTrigger, setLastRefreshTrigger] = useState(-1);
+
+  // Helper function to format currency properly
+  const formatCurrency = (amount: number | undefined | null) => {
+    if (amount === undefined || amount === null || isNaN(amount) || typeof amount !== 'number') {
+      return '₹0.00';
+    }
+    return `₹${amount.toFixed(2)}`;
+  };
 
   // Load calendar data for current month
   const loadCalendarData = async () => {
@@ -37,18 +78,39 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
       );
       setCalendarData(data);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load calendar data');
       console.error('Calendar loading error:', error);
+      Alert.alert('Error', 'Failed to load calendar data. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // Load calendar data when:
+    // 1. Component becomes visible for the first time
+    // 2. Month changes (currentDate dependency)
+    // 3. Refresh trigger changes (but with throttling)
     if (visible) {
-      loadCalendarData();
+      // If no data yet, load immediately
+      if (!calendarData) {
+        loadCalendarData();
+        setLastRefreshTrigger(refreshTrigger);
+        return;
+      }
+      
+      // If refresh trigger changed, wait a bit before refreshing to avoid flicker
+      if (refreshTrigger !== lastRefreshTrigger) {
+        const timeoutId = setTimeout(() => {
+          if (visible) { // Check if still visible after timeout
+            loadCalendarData();
+            setLastRefreshTrigger(refreshTrigger);
+          }
+        }, 500); // 500ms delay to prevent rapid refreshes
+        
+        return () => clearTimeout(timeoutId);
+      }
     }
-  }, [visible, currentDate]);
+  }, [visible, currentDate, refreshTrigger]);
 
   const navigateMonth = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
@@ -67,7 +129,7 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
         key={event.id}
         style={[
           styles.eventDot,
-          { backgroundColor: event.type === 'income' ? '#10B981' : '#EF4444' }
+          { backgroundColor: event.type === 'income' ? colors.success : colors.error }
         ]}
       />
     ));
@@ -75,100 +137,91 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
 
   const renderCalendarDay = ({ item: day }: { item: CalendarDay }) => {
     const isSelected = selectedDay?.date === day.date;
-    const hasEvents = day.events.length > 0;
+    const hasEvents = day.events && day.events.length > 0;
     
     return (
       <TouchableOpacity
         style={[
           styles.dayContainer,
-          !day.isCurrentMonth && styles.dayOutOfMonth,
-          day.isToday && styles.dayToday,
-          isSelected && styles.daySelected,
+          { backgroundColor: colors.surface },
+          !day.isCurrentMonth && { backgroundColor: 'transparent' },
+          day.isToday && { backgroundColor: colors.primarySurface, borderColor: colors.primary, borderWidth: 2 },
+          isSelected && { backgroundColor: colors.primary },
         ]}
-        onPress={() => setSelectedDay(day)}
+        onPress={() => {
+          setSelectedDay(day);
+        }}
       >
-        <Text
-          style={[
-            styles.dayText,
-            !day.isCurrentMonth && styles.dayTextOutOfMonth,
-            day.isToday && styles.dayTextToday,
-            isSelected && styles.dayTextSelected,
-          ]}
-        >
-          {day.dayOfMonth}
-        </Text>
-        
-        {hasEvents && (
-          <View style={styles.eventsContainer}>
-            {renderDayEvents(day.events)}
-            {day.events.length > 2 && (
-              <Text style={styles.moreEventsText}>+{day.events.length - 2}</Text>
-            )}
-          </View>
-        )}
-
-        {hasEvents && (
-          <View style={styles.dayAmountContainer}>
-            {day.totalIncome > 0 && (
-              <Text style={styles.incomeText}>+₹{day.totalIncome}</Text>
-            )}
-            {day.totalExpenses > 0 && (
-              <Text style={styles.expenseText}>-₹{day.totalExpenses}</Text>
-            )}
-          </View>
-        )}
+        <View style={styles.dayContent}>
+          <Text
+            style={[
+              styles.dayText,
+              { color: colors.text },
+              !day.isCurrentMonth && { color: colors.placeholder },
+              day.isToday && { color: colors.primary, fontWeight: '700' },
+              isSelected && { color: 'white', fontWeight: '700' },
+            ]}
+          >
+            {day.dayOfMonth}
+          </Text>
+          
+          {hasEvents && (
+            <View style={styles.eventsContainer}>
+              {renderDayEvents(day.events)}
+              {day.events.length > 2 && (
+                <Text style={[styles.moreEventsText, { color: colors.textSecondary }]}>+{day.events.length - 2}</Text>
+              )}
+            </View>
+          )}
+        </View>
       </TouchableOpacity>
     );
   };
 
-  const renderEventDetails = (event: CalendarEvent) => (
-    <View key={event.id} style={styles.eventDetail}>
-      <View style={styles.eventHeader}>
-        <View
-          style={[
-            styles.eventTypeIndicator,
-            { backgroundColor: event.type === 'income' ? '#10B981' : '#EF4444' }
-          ]}
-        />
-        <Text style={styles.eventTitle}>{event.title}</Text>
-        <Text
-          style={[
-            styles.eventAmount,
-            { color: event.type === 'income' ? '#10B981' : '#EF4444' }
-          ]}
-        >
-          {event.type === 'income' ? '+' : '-'}₹{event.amount.toFixed(2)}
-        </Text>
-      </View>
-      <Text style={styles.eventCategory}>{event.category}</Text>
-      {event.description && (
-        <Text style={styles.eventDescription}>{event.description}</Text>
-      )}
-      {event.isRecurring && (
-        <View style={styles.recurringBadge}>
-          <Ionicons name="repeat" size={12} color="#6366F1" />
-          <Text style={styles.recurringText}>Recurring</Text>
-        </View>
-      )}
-    </View>
-  );
+  const renderEventDetails = (event: CalendarEvent) => {
+    // Convert CalendarEvent to TransactionCardData
+    const transactionData: TransactionCardData = {
+      id: event.id,
+      title: event.title,
+      amount: event.amount,
+      type: event.type,
+      category: event.category,
+      date: event.date,
+      description: event.description,
+      source: event.isRecurring ? 'Recurring' : undefined,
+    };
+
+    return (
+      <TransactionCard
+        key={event.id}
+        transaction={transactionData}
+        compact={true}
+        showDeleteButton={false}
+      />
+    );
+  };
 
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.container}>
+    <Modal 
+      visible={visible} 
+      animationType="slide" 
+      presentationStyle="fullScreen"
+      statusBarTranslucent={true}
+    >
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Header */}
-        <LinearGradient colors={['#6366F1', '#8B5CF6']} style={styles.header}>
+        <LinearGradient colors={colors.headerGradient} style={styles.header}>
           <View style={styles.headerContent}>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Ionicons name="close" size={24} color="white" />
             </TouchableOpacity>
             
-            <View style={styles.headerCenter}>
+            <View style={styles.headerCenterContainer}>
               <TouchableOpacity
                 onPress={() => navigateMonth('prev')}
-                style={styles.navButton}
+                style={styles.monthNavButton}
               >
                 <Ionicons name="chevron-back" size={20} color="white" />
               </TouchableOpacity>
@@ -179,97 +232,149 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
               
               <TouchableOpacity
                 onPress={() => navigateMonth('next')}
-                style={styles.navButton}
+                style={styles.monthNavButton}
               >
                 <Ionicons name="chevron-forward" size={20} color="white" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.headerRight}>
-              <Text style={styles.monthTotal}>
-                Net: ₹{calendarData?.netAmount.toFixed(2) || '0.00'}
-              </Text>
-            </View>
+            <View style={styles.spacer} />
+          </View>
+          
+          <View style={styles.headerSummary}>
+            <Text style={styles.monthTotal}>
+              Net Amount: {formatCurrency(calendarData?.netAmount || 0)}
+            </Text>
           </View>
         </LinearGradient>
 
         <ScrollView style={styles.content}>
-          {/* Calendar Grid */}
-          <View style={styles.calendarContainer}>
-            {/* Day Headers */}
-            <View style={styles.dayHeaders}>
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <Text key={day} style={styles.dayHeaderText}>
-                  {day}
-                </Text>
-              ))}
+          {loading ? (
+            <View style={[styles.loadingContainer, { backgroundColor: colors.cardBackground }]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading calendar...</Text>
             </View>
+          ) : (
+            <>
+              {/* Calendar Grid */}
+              <View style={[styles.calendarContainer, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
+                {/* Day Headers */}
+                <View style={styles.dayHeaders}>
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                    <Text key={day} style={[styles.dayHeaderText, { color: colors.textSecondary }]}>
+                      {day}
+                    </Text>
+                  ))}
+                </View>
 
-            {/* Calendar Days */}
-            {calendarData && (
-              <FlatList
-                data={calendarData.days}
-                renderItem={renderCalendarDay}
-                keyExtractor={(item) => item.date}
-                numColumns={7}
-                scrollEnabled={false}
-                style={styles.daysGrid}
-              />
-            )}
-          </View>
-
-          {/* Month Summary */}
-          {calendarData && (
-            <View style={styles.summaryContainer}>
-              <Text style={styles.summaryTitle}>Monthly Summary</Text>
-              <View style={styles.summaryGrid}>
-                <View style={styles.summaryCard}>
-                  <Text style={styles.summaryLabel}>Total Income</Text>
-                  <Text style={[styles.summaryValue, styles.incomeColor]}>
-                    +₹{calendarData.totalIncome.toFixed(2)}
-                  </Text>
-                </View>
-                <View style={styles.summaryCard}>
-                  <Text style={styles.summaryLabel}>Total Expenses</Text>
-                  <Text style={[styles.summaryValue, styles.expenseColor]}>
-                    -₹{calendarData.totalExpenses.toFixed(2)}
-                  </Text>
-                </View>
-                <View style={styles.summaryCard}>
-                  <Text style={styles.summaryLabel}>Net Amount</Text>
-                  <Text
-                    style={[
-                      styles.summaryValue,
-                      calendarData.netAmount >= 0 ? styles.incomeColor : styles.expenseColor
-                    ]}
-                  >
-                    {calendarData.netAmount >= 0 ? '+' : ''}₹{calendarData.netAmount.toFixed(2)}
-                  </Text>
-                </View>
+                {/* Calendar Days */}
+                {calendarData && (
+                  <FlatList
+                    data={calendarData.days}
+                    renderItem={renderCalendarDay}
+                    keyExtractor={(item) => item.date}
+                    numColumns={7}
+                    scrollEnabled={false}
+                    style={styles.daysGrid}
+                  />
+                )}
               </View>
-            </View>
-          )}
 
-          {/* Selected Day Details */}
-          {selectedDay && (
-            <View style={styles.dayDetailsContainer}>
-              <Text style={styles.dayDetailsTitle}>
-                {new Date(selectedDay.date).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-              </Text>
-              
-              {selectedDay.events.length === 0 ? (
-                <Text style={styles.noEventsText}>No transactions on this day</Text>
-              ) : (
-                <View style={styles.eventsListContainer}>
-                  {selectedDay.events.map(renderEventDetails)}
+              {/* Daily Spending Overview */}
+              {calendarData && (
+                <View style={[styles.summaryContainer, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
+                  <Text style={[styles.summaryTitle, { color: colors.text }]}>Daily Spending Overview</Text>
+                  
+                  {/* Today's Spending */}
+                  <View style={[styles.todaySpendingCard, { backgroundColor: colors.primarySurface, borderColor: colors.primary }]}>
+                    <Text style={[styles.todayLabel, { color: colors.primary }]}>Today's Total</Text>
+                    <Text style={[styles.todayAmount, { color: colors.primary }]}>
+                      {formatCurrency(calendarData.days.find(day => day.isToday)?.totalExpenses || 0)}
+                    </Text>
+                    {(calendarData.days.find(day => day.isToday)?.events.length || 0) > 0 && (
+                      <Text style={[styles.todayTransactions, { color: colors.textSecondary }]}>
+                        {calendarData.days.find(day => day.isToday)?.events.length || 0} transactions
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Top Spending Days */}
+                  <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>Top Spending Days This Month</Text>
+                  <ScrollView style={styles.topSpendingList} showsVerticalScrollIndicator={false}>
+                    {calendarData.days
+                      .filter(day => day.totalExpenses > 0 && day.isCurrentMonth)
+                      .sort((a, b) => b.totalExpenses - a.totalExpenses)
+                      .slice(0, 5)
+                      .map(day => (
+                        <TouchableOpacity 
+                          key={day.date}
+                          style={[styles.spendingDayCard, { backgroundColor: colors.surface }]}
+                          onPress={() => setSelectedDay(day)}
+                        >
+                          <View style={styles.spendingDayInfo}>
+                            <Text style={[styles.spendingDate, { color: colors.text }]}>
+                              {new Date(day.date).toLocaleDateString('en-US', { 
+                                weekday: 'short', 
+                                day: 'numeric' 
+                              })}
+                            </Text>
+                            <Text style={[styles.spendingAmount, { color: colors.error }]}>
+                              {formatCurrency(day.totalExpenses)}
+                            </Text>
+                          </View>
+                          <Text style={[styles.spendingTransactions, { color: colors.textSecondary }]}>
+                            {day.events.length} transaction{day.events.length !== 1 ? 's' : ''}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                  </ScrollView>
+
+                  {/* Monthly Stats */}
+                  <View style={styles.monthlyStatsGrid}>
+                    <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+                      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Avg/Day</Text>
+                      <Text style={[styles.statValue, { color: colors.text }]}>
+                        {formatCurrency(calendarData.totalExpenses / new Date(calendarData.year, calendarData.month + 1, 0).getDate())}
+                      </Text>
+                    </View>
+                    <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+                      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Days</Text>
+                      <Text style={[styles.statValue, { color: colors.text }]}>
+                        {calendarData.days.filter(day => day.totalExpenses > 0 && day.isCurrentMonth).length}
+                      </Text>
+                    </View>
+                    <View style={[styles.statCard, { backgroundColor: colors.surface }]}>
+                      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>This Month</Text>
+                      <Text style={[styles.statValue, { color: colors.error }]}>
+                        {formatCurrency(calendarData.totalExpenses)}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
               )}
-            </View>
+
+              {/* Selected Day Details */}
+              {selectedDay && (
+                <View style={[styles.dayDetailsContainer, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
+                  <Text style={[styles.dayDetailsTitle, { color: colors.text }]}>
+                    {new Date(selectedDay.date).toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </Text>
+                  
+                  {selectedDay.events.length === 0 ? (
+                    <Text style={[styles.noEventsText, { color: colors.textSecondary }]}>No transactions on this day</Text>
+                  ) : (
+                    <View style={styles.eventsListContainer}>
+                      {selectedDay.events.map(renderEventDetails)}
+                    </View>
+                  )}
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
       </View>
@@ -280,17 +385,17 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
   },
   header: {
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingTop: 60,
+    paddingBottom: 25,
     paddingHorizontal: 20,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 40,
   },
   closeButton: {
     width: 40,
@@ -300,34 +405,62 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerCenter: {
+  headerCenterContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
     justifyContent: 'center',
+    flex: 1,
   },
-  navButton: {
-    padding: 8,
+  monthNavButton: {
+    padding: 10,
+    marginHorizontal: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: 'white',
     marginHorizontal: 20,
+    textAlign: 'center',
+    minWidth: 150,
   },
-  headerRight: {
-    alignItems: 'flex-end',
+  spacer: {
+    width: 40,
+  },
+  headerSummary: {
+    alignItems: 'center',
+    marginTop: 10,
   },
   monthTotal: {
-    fontSize: 12,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '600',
+    textAlign: 'center',
   },
   content: {
     flex: 1,
   },
+  loadingContainer: {
+    margin: 16,
+    borderRadius: 12,
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
   calendarContainer: {
-    backgroundColor: 'white',
     margin: 16,
     borderRadius: 12,
     padding: 16,
@@ -336,6 +469,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    borderWidth: 1,
   },
   dayHeaders: {
     flexDirection: 'row',
@@ -346,7 +480,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 12,
     fontWeight: '600',
-    color: '#6B7280',
   },
   daysGrid: {
     flex: 1,
@@ -357,89 +490,148 @@ const styles = StyleSheet.create({
     margin: 1,
     padding: 4,
     borderRadius: 6,
-    backgroundColor: '#F9FAFB',
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
-  },
-  dayOutOfMonth: {
-    backgroundColor: 'transparent',
-  },
-  dayToday: {
-    backgroundColor: '#EBF4FF',
     borderWidth: 1,
-    borderColor: '#3B82F6',
+    borderColor: 'transparent',
   },
-  daySelected: {
-    backgroundColor: '#6366F1',
-  },
-  dayText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    textAlign: 'center',
-  },
-  dayTextOutOfMonth: {
-    color: '#D1D5DB',
-  },
-  dayTextToday: {
-    color: '#3B82F6',
-    fontWeight: '700',
-  },
-  dayTextSelected: {
-    color: 'white',
-    fontWeight: '700',
-  },
-  eventsContainer: {
-    position: 'absolute',
-    bottom: 2,
-    left: 2,
-    right: 2,
-    flexDirection: 'row',
+  dayContent: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
     justifyContent: 'center',
   },
+  dayText: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  eventsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+    minHeight: 8,
+  },
   eventDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     marginHorizontal: 1,
   },
   moreEventsText: {
     fontSize: 8,
-    color: '#6B7280',
-  },
-  dayAmountContainer: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-  },
-  incomeText: {
-    fontSize: 8,
-    color: '#10B981',
-    fontWeight: '600',
-  },
-  expenseText: {
-    fontSize: 8,
-    color: '#EF4444',
+    marginLeft: 2,
     fontWeight: '600',
   },
   summaryContainer: {
-    backgroundColor: 'white',
     margin: 16,
     marginTop: 0,
     borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+  },
+  summaryTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  todaySpendingCard: {
+    borderRadius: 12,
     padding: 16,
+    marginBottom: 20,
+    alignItems: 'center',
+    borderWidth: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  summaryTitle: {
-    fontSize: 18,
+  todayLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  todayAmount: {
+    fontSize: 24,
     fontWeight: '700',
-    color: '#1F2937',
+    marginBottom: 4,
+  },
+  todayTransactions: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
     marginBottom: 12,
+    marginTop: 8,
+  },
+  topSpendingList: {
+    maxHeight: 200,
+    marginBottom: 20,
+  },
+  spendingDayCard: {
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  spendingDayInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  spendingDate: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  spendingAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  spendingTransactions: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  monthlyStatsGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -447,29 +639,27 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   summaryLabel: {
     fontSize: 12,
-    color: '#6B7280',
     fontWeight: '500',
-    marginBottom: 4,
+    marginBottom: 6,
+    textAlign: 'center',
   },
   summaryValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
-  },
-  incomeColor: {
-    color: '#10B981',
-  },
-  expenseColor: {
-    color: '#EF4444',
+    textAlign: 'center',
   },
   dayDetailsContainer: {
-    backgroundColor: 'white',
     margin: 16,
     marginTop: 0,
     borderRadius: 12,
@@ -479,75 +669,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+    borderWidth: 1,
   },
   dayDetailsTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1F2937',
     marginBottom: 16,
   },
   noEventsText: {
     fontSize: 14,
-    color: '#6B7280',
     textAlign: 'center',
     padding: 20,
   },
   eventsListContainer: {
     gap: 12,
-  },
-  eventDetail: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
-  },
-  eventHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  eventTypeIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  eventTitle: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  eventAmount: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  eventCategory: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 16,
-    marginBottom: 2,
-  },
-  eventDescription: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginLeft: 16,
-    marginBottom: 4,
-  },
-  recurringBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: '#EBF4FF',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginLeft: 16,
-  },
-  recurringText: {
-    fontSize: 10,
-    color: '#6366F1',
-    fontWeight: '500',
-    marginLeft: 4,
   },
 });
 

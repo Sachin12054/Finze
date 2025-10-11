@@ -3,19 +3,19 @@ import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Animated,
+  Dimensions,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import ExpoGoSocialAuthService from '../../src/services/expoGoSocialAuthService';
-import SocialAuthService from '../../src/services/socialAuthService';
+import ExpoGoSocialAuthService from '../../src/services/auth/expoGoSocialAuthService';
+import SocialAuthService from '../../src/services/auth/socialAuthService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 60,
-    paddingTop: 20,
+    paddingTop: 0,
   },
   logoContainer: {
     alignItems: 'center',
@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     textAlign: 'center',
     marginBottom: 16,
-    marginTop: -20,
+    marginTop: -30,
     lineHeight: 36,
   },
   welcomeTitleDark: {
@@ -411,7 +411,7 @@ const styles = StyleSheet.create({
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 32,
+    marginVertical: 20,
     paddingHorizontal: 20,
   },
   dividerLine: {

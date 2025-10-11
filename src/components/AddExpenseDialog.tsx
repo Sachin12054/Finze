@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -17,8 +16,10 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
-import { EnhancedFirebaseService } from '../services/enhancedFirebaseService';
+import { categoryService } from '../services/api/categoryService';
+import { EnhancedFirebaseService } from '../services/firebase/enhancedFirebaseService';
 
 const { width } = Dimensions.get('window');
 
@@ -216,64 +217,50 @@ const AddExpenseDialog: React.FC<AddExpenseDialogProps> = ({
 
     setAiAnalyzing(true);
     try {
-      // Call AI categorization API - use network IP instead of localhost for mobile/emulator access
-      const response = await fetch('http://10.12.70.202:8001/api/categorize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          description: title.trim()
-        }),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
+      // Use the categoryService for AI categorization
+      const result = await categoryService.categorizeExpense(title.trim(), parseFloat(amount) || undefined);
+      
+      // Map AI categories to frontend categories
+      const categoryMapping: { [key: string]: string } = {
+        // New Ultra-Perfect categorizer categories (exact match)
+        'Food & Dining': 'Food & Dining',
+        'Transportation': 'Transportation',
+        'Shopping': 'Shopping',
+        'Entertainment': 'Entertainment',
+        'Technology': 'Technology',
+        'Bills & Utilities': 'Bills & Utilities',
+        'Healthcare': 'Healthcare',
+        'Travel': 'Travel',
+        'Education': 'Education',
+        'Business': 'Business',
+        'Other': 'Other',
         
-        // Map AI categories to frontend categories
-        const categoryMapping: { [key: string]: string } = {
-          // New Ultra-Perfect categorizer categories (exact match)
-          'Food & Dining': 'Food & Dining',
-          'Transportation': 'Transportation',
-          'Shopping': 'Shopping',
-          'Entertainment': 'Entertainment',
-          'Technology': 'Technology',
-          'Bills & Utilities': 'Bills & Utilities',
-          'Healthcare': 'Healthcare',
-          'Travel': 'Travel',
-          'Education': 'Education',
-          'Business': 'Business',
-          'Other': 'Other',
-          
-          // Legacy support for old categorizer (lowercase)
-          'food': 'Food & Dining',
-          'transport': 'Transportation',
-          'shopping': 'Shopping',
-          'entertainment': 'Entertainment',
-          'technology': 'Technology',
-          'bills': 'Bills & Utilities',
-          'healthcare': 'Healthcare',
-          'travel': 'Travel',
-          'education': 'Education',
-          'business': 'Business',
-          'other': 'Other'
-        };
-        
-        const mappedCategory = categoryMapping[result.category] || 'Other';
-        
-        setAiPredictedCategory(mappedCategory);
-        setAiConfidence(result.confidence || 0);
-        setCategory(mappedCategory);
-        setAiAnalyzed(true);
-        
-        Alert.alert(
-          'AI Analysis Complete', 
-          `Predicted Category: ${mappedCategory}\nConfidence: ${(result.confidence * 100).toFixed(1)}%`,
-          [{ text: 'Great!', style: 'default' }]
-        );
-      } else {
-        throw new Error('AI service unavailable');
-      }
+        // Legacy support for old categorizer (lowercase)
+        'food': 'Food & Dining',
+        'transport': 'Transportation',
+        'shopping': 'Shopping',
+        'entertainment': 'Entertainment',
+        'technology': 'Technology',
+        'bills': 'Bills & Utilities',
+        'healthcare': 'Healthcare',
+        'travel': 'Travel',
+        'education': 'Education',
+        'business': 'Business',
+        'other': 'Other'
+      };
+      
+      const mappedCategory = categoryMapping[result.category] || 'Other';
+      
+      setAiPredictedCategory(mappedCategory);
+      setAiConfidence(result.confidence || 0);
+      setCategory(mappedCategory);
+      setAiAnalyzed(true);
+      
+      Alert.alert(
+        'AI Analysis Complete', 
+        `Predicted Category: ${mappedCategory}\nConfidence: ${(result.confidence * 100).toFixed(1)}%`,
+        [{ text: 'Great!', style: 'default' }]
+      );
     } catch (error) {
       console.error('AI Analysis error:', error);
       Alert.alert(

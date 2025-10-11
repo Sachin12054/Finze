@@ -1,4 +1,4 @@
-import { EnhancedFirebaseService } from './enhancedFirebaseService';
+import { EnhancedFirebaseService } from './firebase/enhancedFirebaseService';
 
 export interface CalendarEvent {
   id: string;
@@ -48,7 +48,7 @@ export class CalendarService {
       const calendarEnd = new Date(endDate);
       calendarEnd.setDate(calendarEnd.getDate() + (6 - calendarEnd.getDay()));
 
-      // Fetch transactions for the period
+      // Fetch transactions for the period - force fresh data
       const transactions = await EnhancedFirebaseService.getTransactionsByDateRange(
         calendarStart.toISOString(),
         calendarEnd.toISOString()

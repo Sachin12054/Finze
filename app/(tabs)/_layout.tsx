@@ -3,7 +3,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import { ThemeProvider } from '../../src/contexts/ThemeContext';
-import { auth } from '../../src/services/firebase';
+import { auth } from '../../src/services/firebase/firebase';
 
 import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';

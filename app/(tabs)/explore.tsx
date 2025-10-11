@@ -1,59 +1,53 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Picker } from '@react-native-picker/picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  onSnapshot,
-  query,
-  updateDoc
+    collection,
+    deleteDoc,
+    doc,
+    limit,
+    onSnapshot,
+    query,
+    updateDoc
 } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Modal,
-  Platform,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import AddBudgetDialog from '../../src/components/AddBudgetDialog';
+import { AddRecurringDialog } from '../../src/components/AddRecurringDialog';
+import { AddSavingsGoalDialog } from '../../src/components/AddSavingsGoalDialog';
+import { RecurringTab } from '../../src/components/tabs/RecurringTab';
+import { SavingsTab } from '../../src/components/tabs/SavingsTab';
 import { useTheme } from '../../src/contexts/ThemeContext';
-import { auth, db } from '../../src/services/firebase';
+import { AIInsightsData, aiInsightsService } from '../../src/services/aiInsightsService';
+import { auth, db } from '../../src/services/firebase/firebase';
+
+// Import Enhanced BudgetTab component
+import { BudgetTab } from '../../src/components/tabs/BudgetTab';
 
 // Import Enhanced Firebase Service for consistent data handling like index.tsx
 import {
-  Budget,
-  EnhancedFirebaseService,
-  SavingsGoal as FirebaseSavingsGoal,
-  Transaction
-} from '../../src/services/enhancedFirebaseService';
+    Budget,
+    EnhancedFirebaseService,
+    SavingsGoal as FirebaseSavingsGoal,
+    Recurrence,
+    Transaction
+} from '../../src/services/firebase/enhancedFirebaseService';
 
 
 
-// Local types for recurring transactions and smart suggestions (not in enhanced service yet)
-interface RecurringTransaction {
-  id?: string;
-  title: string;
-  amount: number;
-  category: string;
-  type: 'income' | 'expense';
-  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
-  lastApplied: string;
-  nextDue: string;
-  isActive: boolean;
-}
-
+// Local types for smart suggestions (not in enhanced service yet)
 interface SavingsGoal {
   id?: string;
   name: string;
@@ -77,12 +71,6 @@ interface SmartSuggestion {
   createdAt: string;
 }
 
-const categories = [
-  'Food & Dining', 'Transportation', 'Shopping', 'Entertainment',
-  'Bills & Utilities', 'Healthcare', 'Education', 'Travel',
-  'Investment', 'Income', 'Other'
-];
-
 export default function ExploreDashboard() {
   const { isDarkTheme, toggleTheme } = useTheme();
   const [user, setUser] = useState<any>(null);
@@ -92,9 +80,11 @@ export default function ExploreDashboard() {
   // Data states - using Firebase types for consistency with index.tsx
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
+  const [recurringTransactions, setRecurringTransactions] = useState<Recurrence[]>([]);
   const [savingsGoals, setSavingsGoals] = useState<FirebaseSavingsGoal[]>([]);
   const [smartSuggestions, setSmartSuggestions] = useState<SmartSuggestion[]>([]);
+  const [aiInsights, setAIInsights] = useState<AIInsightsData | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
   
   // Financial summary
   const [totalBalance, setTotalBalance] = useState(0);
@@ -102,39 +92,16 @@ export default function ExploreDashboard() {
   const [monthlyExpenses, setMonthlyExpenses] = useState(0);
   
   // UI states
-  const [activeTab, setActiveTab] = useState<'overview' | 'budgets' | 'goals' | 'recurring' | 'insights'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'budgets' | 'goals' | 'recurring' | 'insights' | 'scanner-history'>('overview');
   const [isBalanceVisible, setIsBalanceVisible] = useState(true);
   
   // Modal states
   const [showAddBudget, setShowAddBudget] = useState(false);
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [showAddRecurring, setShowAddRecurring] = useState(false);
+  const [editingRecurrence, setEditingRecurrence] = useState<Recurrence | null>(null);
+  const [editingSavingsGoal, setEditingSavingsGoal] = useState<FirebaseSavingsGoal | null>(null);
   
-  // Form states
-  const [budgetForm, setBudgetForm] = useState({
-    category: '',
-    amount: '',
-    period: 'monthly' as 'weekly' | 'monthly' | 'yearly',
-    alertThreshold: 80
-  });
-  
-  const [goalForm, setGoalForm] = useState({
-    name: '',
-    targetAmount: '',
-    targetDate: '',
-    category: 'Other',
-    priority: 'medium' as 'low' | 'medium' | 'high',
-    description: ''
-  });
-  
-  const [recurringForm, setRecurringForm] = useState({
-    title: '',
-    amount: '',
-    category: '',
-    type: 'expense' as 'income' | 'expense',
-    frequency: 'monthly' as 'daily' | 'weekly' | 'monthly' | 'yearly'
-  });
-
   // Authentication and data loading
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -151,6 +118,28 @@ export default function ExploreDashboard() {
 
     return unsubscribe;
   }, []);
+
+  // Load AI insights
+  const loadAIInsights = async () => {
+    if (!user) return;
+    
+    setInsightsLoading(true);
+    try {
+      const insights = await aiInsightsService.getAIInsights('month');
+      setAIInsights(insights);
+    } catch (error) {
+      console.error('Error loading AI insights:', error);
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
+
+  // Load AI insights when user changes
+  useEffect(() => {
+    if (user) {
+      loadAIInsights();
+    }
+  }, [user]);
 
   const setupRealtimeListeners = (userId: string) => {
     let unsubscribeFunctions: (() => void)[] = [];
@@ -196,22 +185,11 @@ export default function ExploreDashboard() {
       console.error('Error setting up listeners:', error);
     }
 
-    // Recurring transactions listener (using direct Firestore)
-    const recurringRef = collection(db, `users/${userId}/recurring_expenses`);
-    const unsubRecurring = onSnapshot(
-      recurringRef, 
-      (snapshot) => {
-        const recurringData = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as RecurringTransaction[];
-        setRecurringTransactions(recurringData);
-      },
-      (error) => {
-        console.error('Error fetching recurring transactions:', error);
-        setRecurringTransactions([]);
-      }
-    );
+    // Recurring transactions listener (using EnhancedFirebaseService)
+    const unsubRecurring = EnhancedFirebaseService.getRecurrenceListener((recurringData) => {
+      console.log('🔄 Explore: Received recurring data:', recurringData);
+      setRecurringTransactions(recurringData);
+    });
 
     // Smart suggestions listener (simplified to avoid index requirement)
     const suggestionsRef = collection(db, `users/${userId}/smart_suggestions`);
@@ -256,155 +234,6 @@ export default function ExploreDashboard() {
     );
   };
 
-  // Add budget function
-  const addBudget = async () => {
-    if (!user) return;
-
-    try {
-      const amount = parseFloat(budgetForm.amount);
-      if (isNaN(amount) || amount <= 0) {
-        showToast('Please enter a valid budget amount', 'error');
-        return;
-      }
-
-      if (!budgetForm.category) {
-        showToast('Please select a category', 'error');
-        return;
-      }
-
-      const budget: Omit<Budget, 'id'> = {
-        category: budgetForm.category,
-        amount,
-        spent: 0,
-        period: budgetForm.period,
-        alertThreshold: budgetForm.alertThreshold,
-        isActive: true,
-        userId: user.uid,
-        startDate: new Date().toISOString(),
-        endDate: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
-        notifications: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-
-      await addDoc(collection(db, `users/${user.uid}/budgets`), budget);
-      
-      showToast('Budget created successfully');
-
-      setBudgetForm({
-        category: '',
-        amount: '',
-        period: 'monthly',
-        alertThreshold: 80
-      });
-      setShowAddBudget(false);
-    } catch (error) {
-      showToast('Failed to create budget', 'error');
-    }
-  };
-
-  // Add savings goal function
-  const addSavingsGoal = async () => {
-    if (!user) return;
-
-    try {
-      const targetAmount = parseFloat(goalForm.targetAmount);
-      if (isNaN(targetAmount) || targetAmount <= 0) {
-        showToast('Please enter a valid target amount', 'error');
-        return;
-      }
-
-      if (!goalForm.name.trim() || !goalForm.targetDate) {
-        showToast('Please fill in all required fields', 'error');
-        return;
-      }
-
-      const goal: Omit<SavingsGoal, 'id'> = {
-        ...goalForm,
-        targetAmount,
-        currentAmount: 0,
-        isCompleted: false
-      };
-
-      await addDoc(collection(db, `users/${user.uid}/savings_goals`), goal);
-      
-      showToast('Savings goal created successfully');
-
-      setGoalForm({
-        name: '',
-        targetAmount: '',
-        targetDate: '',
-        category: 'Other',
-        priority: 'medium',
-        description: ''
-      });
-      setShowAddGoal(false);
-    } catch (error) {
-      showToast('Failed to create savings goal', 'error');
-    }
-  };
-
-  // Add recurring transaction function
-  const addRecurringTransaction = async () => {
-    if (!user) return;
-
-    try {
-      const amount = parseFloat(recurringForm.amount);
-      if (isNaN(amount) || amount <= 0) {
-        showToast('Please enter a valid amount', 'error');
-        return;
-      }
-
-      if (!recurringForm.title.trim() || !recurringForm.category) {
-        showToast('Please fill in all required fields', 'error');
-        return;
-      }
-
-      const nextDue = new Date();
-      // Calculate next due date based on frequency
-      switch (recurringForm.frequency) {
-        case 'daily':
-          nextDue.setDate(nextDue.getDate() + 1);
-          break;
-        case 'weekly':
-          nextDue.setDate(nextDue.getDate() + 7);
-          break;
-        case 'monthly':
-          nextDue.setMonth(nextDue.getMonth() + 1);
-          break;
-        case 'yearly':
-          nextDue.setFullYear(nextDue.getFullYear() + 1);
-          break;
-      }
-
-      const recurringTransaction: Omit<RecurringTransaction, 'id'> = {
-        title: recurringForm.title,
-        amount,
-        category: recurringForm.category,
-        type: recurringForm.type,
-        frequency: recurringForm.frequency,
-        lastApplied: new Date().toISOString(),
-        nextDue: nextDue.toISOString(),
-        isActive: true
-      };
-
-      await addDoc(collection(db, `users/${user.uid}/recurring_expenses`), recurringTransaction);
-      
-      showToast('Recurring transaction created successfully');
-
-      setRecurringForm({
-        title: '',
-        amount: '',
-        category: '',
-        type: 'expense',
-        frequency: 'monthly'
-      });
-      setShowAddRecurring(false);
-    } catch (error) {
-      showToast('Failed to create recurring transaction', 'error');
-    }
-  };
-
   // Delete functions
   const deleteBudget = async (budgetId: string) => {
     if (!user) return;
@@ -419,9 +248,10 @@ export default function ExploreDashboard() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteDoc(doc(db, `users/${user.uid}/budgets`, budgetId));
+              await EnhancedFirebaseService.deleteBudget(budgetId);
               showToast('Budget deleted successfully');
             } catch (error) {
+              console.error('Error deleting budget:', error);
               showToast('Failed to delete budget', 'error');
             }
           }
@@ -479,50 +309,6 @@ export default function ExploreDashboard() {
   };
 
   // Toggle recurring transaction status
-  const toggleRecurringStatus = async (recurringId: string) => {
-    if (!user) return;
-    
-    try {
-      const recurringRef = doc(db, `users/${user.uid}/recurring_expenses`, recurringId);
-      const recurring = recurringTransactions.find(r => r.id === recurringId);
-      
-      if (!recurring) return;
-      
-      await updateDoc(recurringRef, {
-        isActive: !recurring.isActive
-      });
-      
-      showToast(`Recurring transaction ${!recurring.isActive ? 'activated' : 'paused'}`);
-    } catch (error) {
-      showToast('Failed to update recurring transaction', 'error');
-    }
-  };
-
-  // Delete recurring transaction
-  const deleteRecurringTransaction = async (recurringId: string) => {
-    if (!user) return;
-    
-    Alert.alert(
-      'Delete Recurring Transaction',
-      'Are you sure you want to delete this recurring transaction?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteDoc(doc(db, `users/${user.uid}/recurring_expenses`, recurringId));
-              showToast('Recurring transaction deleted successfully');
-            } catch (error) {
-              showToast('Failed to delete recurring transaction', 'error');
-            }
-          }
-        }
-      ]
-    );
-  };
-
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 1000);
@@ -530,15 +316,15 @@ export default function ExploreDashboard() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.loadingContainer, { backgroundColor: isDarkTheme ? '#0f172a' : '#f8fafc' }]}>
+      <View style={[styles.loadingContainer, { backgroundColor: isDarkTheme ? '#0f172a' : '#f8fafc' }]}>
         <Text style={[styles.loadingText, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Loading Dashboard...</Text>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDarkTheme ? '#0f172a' : '#f8fafc' }]}>
-      <StatusBar barStyle={isDarkTheme ? "light-content" : "dark-content"} backgroundColor={isDarkTheme ? "#0f172a" : "#f8fafc"} />
+    <View style={[styles.container, { backgroundColor: isDarkTheme ? '#0f172a' : '#f8fafc' }]}>
+      <StatusBar barStyle="light-content" backgroundColor="#6366F1" />
       
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -553,38 +339,32 @@ export default function ExploreDashboard() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
-          <Animated.View entering={FadeInDown.delay(100)} style={styles.header}>
-            <View style={styles.headerContent}>
-              <View style={styles.headerLeft}>
-                <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}</Text>
-                <Text style={styles.userName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>
-                  {user?.displayName || user?.email?.split('@')[0] || "Dashboard"}
-                </Text>
+          <SafeAreaView>
+            <Animated.View entering={FadeInDown.delay(100)} style={styles.header}>
+              <View style={styles.headerContent}>
+                <View style={styles.headerLeft}>
+                  <Text style={styles.greeting}>Good {new Date().getHours() < 12 ? 'Morning' : new Date().getHours() < 18 ? 'Afternoon' : 'Evening'}</Text>
+                  <Text style={styles.userName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>
+                    {user?.displayName || user?.email?.split('@')[0] || "Dashboard"}
+                  </Text>
+                </View>
+                <View style={styles.headerRight}>
+                  <TouchableOpacity
+                    style={styles.themeToggle}
+                    onPress={toggleTheme}
+                    accessibilityLabel="Toggle theme"
+                  >
+                    <Ionicons 
+                      name={isDarkTheme ? "sunny" : "moon"} 
+                      size={22} 
+                      color="white" 
+                    />
+                  </TouchableOpacity>
+                  
+                </View>
               </View>
-              <View style={styles.headerRight}>
-                <TouchableOpacity
-                  style={styles.themeToggle}
-                  onPress={toggleTheme}
-                  accessibilityLabel="Toggle theme"
-                >
-                  <Ionicons 
-                    name={isDarkTheme ? "sunny" : "moon"} 
-                    size={22} 
-                    color="white" 
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.profileButton}
-                  onPress={() => {}}
-                  accessibilityLabel="Open profile"
-                >
-                  <View style={styles.profileIcon}>
-                    <Ionicons name="person" size={26} color="white" />
-                  </View>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </Animated.View>
+            </Animated.View>
+          </SafeAreaView>
         </LinearGradient>
 
         {/* Tab Navigation */}
@@ -595,7 +375,8 @@ export default function ExploreDashboard() {
               { key: 'budgets', label: 'Budgets', icon: 'wallet-outline' },
               { key: 'goals', label: 'Goals', icon: 'flag-outline' },
               { key: 'recurring', label: 'Recurring', icon: 'repeat-outline' },
-              { key: 'insights', label: 'Insights', icon: 'bulb-outline' }
+              { key: 'insights', label: 'Insights', icon: 'bulb-outline' },
+              { key: 'scanner-history', label: 'Scanner', icon: 'scan-outline' }
             ].map((tab, index) => (
               <Animated.View
                 key={tab.key}
@@ -637,7 +418,7 @@ export default function ExploreDashboard() {
               style={styles.quickActionsContainer}
             >
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Quick Actions</Text>
+                <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Quick Actions</Text>
               </View>
               
               {/* Essential Actions Grid */}
@@ -649,8 +430,8 @@ export default function ExploreDashboard() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.essentialActionContent}>
-                    <View style={[styles.essentialActionIcon, { backgroundColor: '#E8F2FF' }]}>
-                      <Ionicons name="wallet" size={26} color="#2563EB" />
+                    <View style={[styles.essentialActionIcon, { backgroundColor: isDarkTheme ? '#1e40af' : '#E8F2FF' }]}>
+                      <Ionicons name="wallet" size={26} color={isDarkTheme ? '#93c5fd' : '#2563EB'} />
                     </View>
                     <Text style={[styles.essentialActionTitle, { color: isDarkTheme ? '#ffffff' : '#1E293B' }]}>Create Budget</Text>
                     <Text style={[styles.essentialActionSubtitle, { color: isDarkTheme ? '#9ca3af' : '#64748B' }]}>Track spending</Text>
@@ -664,8 +445,8 @@ export default function ExploreDashboard() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.essentialActionContent}>
-                    <View style={[styles.essentialActionIcon, { backgroundColor: '#F3E8FF' }]}>
-                      <Ionicons name="repeat" size={26} color="#9333EA" />
+                    <View style={[styles.essentialActionIcon, { backgroundColor: isDarkTheme ? '#7c3aed' : '#F3E8FF' }]}>
+                      <Ionicons name="repeat" size={26} color={isDarkTheme ? '#c4b5fd' : '#9333EA'} />
                     </View>
                     <Text style={[styles.essentialActionTitle, { color: isDarkTheme ? '#ffffff' : '#1E293B' }]}>Add Recurring</Text>
                     <Text style={[styles.essentialActionSubtitle, { color: isDarkTheme ? '#9ca3af' : '#64748B' }]}>Automate bills</Text>
@@ -679,8 +460,8 @@ export default function ExploreDashboard() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.essentialActionContent}>
-                    <View style={[styles.essentialActionIcon, { backgroundColor: '#E0F7FA' }]}>
-                      <Ionicons name="flag" size={26} color="#0891B2" />
+                    <View style={[styles.essentialActionIcon, { backgroundColor: isDarkTheme ? '#0891b2' : '#E0F7FA' }]}>
+                      <Ionicons name="flag" size={26} color={isDarkTheme ? '#67e8f9' : '#0891B2'} />
                     </View>
                     <Text style={[styles.essentialActionTitle, { color: isDarkTheme ? '#ffffff' : '#1E293B' }]}>Set Goal</Text>
                     <Text style={[styles.essentialActionSubtitle, { color: isDarkTheme ? '#9ca3af' : '#64748B' }]}>Save money</Text>
@@ -689,99 +470,274 @@ export default function ExploreDashboard() {
 
                 <TouchableOpacity
                   style={[styles.essentialActionCard, { backgroundColor: isDarkTheme ? '#1f2937' : '#ffffff', borderColor: isDarkTheme ? '#374151' : '#F1F5F9' }]}
-                  onPress={() => {}}
-                  accessibilityLabel="Scan receipt"
+                  onPress={() => setActiveTab('scanner-history')}
+                  accessibilityLabel="View scanner history"
                   activeOpacity={0.7}
                 >
                   <View style={styles.essentialActionContent}>
-                    <View style={[styles.essentialActionIcon, { backgroundColor: '#FEF2F2' }]}>
-                      <Ionicons name="scan" size={26} color="#DC2626" />
+                    <View style={[styles.essentialActionIcon, { backgroundColor: isDarkTheme ? '#dc2626' : '#FEF2F2' }]}>
+                      <Ionicons name="receipt-outline" size={26} color={isDarkTheme ? '#fca5a5' : '#DC2626'} />
                     </View>
-                    <Text style={[styles.essentialActionTitle, { color: isDarkTheme ? '#ffffff' : '#1E293B' }]}>Smart Scan</Text>
-                    <Text style={[styles.essentialActionSubtitle, { color: isDarkTheme ? '#9ca3af' : '#64748B' }]}>Receipt AI</Text>
+                    <Text style={[styles.essentialActionTitle, { color: isDarkTheme ? '#ffffff' : '#1E293B' }]}>Scanner History</Text>
+                    <Text style={[styles.essentialActionSubtitle, { color: isDarkTheme ? '#9ca3af' : '#64748B' }]}>Receipt scans</Text>
                   </View>
                 </TouchableOpacity>
               </View>
             </Animated.View>
 
-            {/* Budget Overview */}
-            <View style={[styles.overviewCard, { backgroundColor: isDarkTheme ? '#1f2937' : '#ffffff' }]}>
-              <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Budget Overview</Text>
-              {budgets.slice(0, 3).map((budget) => {
-                const currentMonth = new Date().toISOString().slice(0, 7);
-                
-                // More flexible category matching (using category for Dashboard type)
-                const spent = transactions
-                  .filter(exp => {
-                    const expenseCategory = exp.category?.toLowerCase() || '';
-                    const budgetCategory = budget.category?.toLowerCase() || '';
-                    
-                    // Exact match or partial match for categories like "Food & Dining" vs "Food"
-                    const isMatch = expenseCategory === budgetCategory ||
-                                  expenseCategory.includes(budgetCategory) ||
-                                  budgetCategory.includes(expenseCategory);
-                    
-                    const isCurrentMonth = exp.date && exp.date.startsWith(currentMonth);
-                    const isExpense = exp.type === 'expense';
-                    
-                    return isMatch && isCurrentMonth && isExpense;
-                  })
-                  .reduce((sum, exp) => sum + exp.amount, 0);
-                
-                const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
-
-                return (
-                  <View key={budget.id} style={styles.budgetOverviewItem}>
-                    <View style={styles.budgetOverviewInfo}>
-                      <Text style={styles.budgetOverviewCategory}>{budget.category}</Text>
-                      <Text style={styles.budgetOverviewAmount}>
-                        ₹{spent.toFixed(0)} / ₹{budget.amount.toFixed(0)}
-                      </Text>
-                    </View>
-                    <View style={styles.budgetOverviewBar}>
-                      <View
-                        style={[
-                          styles.budgetOverviewFill,
-                          {
-                            width: `${Math.min(percentage, 100)}%`,
-                            backgroundColor: percentage > 80 ? '#ef4444' : '#10b981'
-                          }
-                        ]}
-                      />
-                    </View>
+            {/* Enhanced Budget Overview */}
+            <Animated.View entering={FadeInUp.delay(400)} style={styles.budgetOverviewSection}>
+              {/* Header with title and View All button */}
+              <View style={styles.budgetOverviewHeader}>
+                <View style={styles.budgetOverviewTitleContainer}>
+                  <LinearGradient
+                    colors={['#667eea', '#764ba2'] as const}
+                    style={styles.budgetOverviewIconContainer}
+                  >
+                    <Ionicons name="wallet-outline" size={24} color="white" />
+                  </LinearGradient>
+                  <View style={styles.budgetOverviewTitleInfo}>
+                    <Text style={[styles.budgetOverviewTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                      Budget Overview
+                    </Text>
+                    <Text style={[styles.budgetOverviewSubtitle, { color: isDarkTheme ? '#9ca3af' : '#6b7280' }]}>
+                      {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+                    </Text>
                   </View>
-                );
-              })}
-              {budgets.length === 0 && (
-                <Text style={styles.emptyStateText}>No budgets created yet</Text>
+                </View>
+                
+                <TouchableOpacity 
+                  onPress={() => setActiveTab('budgets')}
+                  style={[styles.budgetOverviewViewAllButton, { 
+                    backgroundColor: isDarkTheme ? '#374151' : '#f3f4f6',
+                    borderWidth: 1,
+                    borderColor: isDarkTheme ? '#6b7280' : '#d1d5db',
+                  }]}
+                >
+                  <Text style={[styles.budgetOverviewViewAllText, { 
+                    color: isDarkTheme ? '#e5e7eb' : '#1f2937' 
+                  }]}>
+                    View All
+                  </Text>
+                  <Ionicons 
+                    name="chevron-forward" 
+                    size={16} 
+                    color={isDarkTheme ? '#e5e7eb' : '#1f2937'} 
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {budgets.length > 0 ? (
+                <>
+                  {/* Display up to 4 budgets in a 2x2 grid layout */}
+                  <View style={styles.budgetOverviewGrid}>
+                    {budgets.slice(0, 4).map((budget, index) => {
+                    const currentMonth = new Date().toISOString().slice(0, 7);
+                    
+                    const spent = transactions
+                      .filter(exp => {
+                        const expenseCategory = exp.category?.toLowerCase() || '';
+                        const budgetCategory = budget.category?.toLowerCase() || '';
+                        
+                        const isMatch = expenseCategory === budgetCategory ||
+                                      expenseCategory.includes(budgetCategory) ||
+                                      budgetCategory.includes(expenseCategory);
+                        
+                        const isCurrentMonth = exp.date && exp.date.startsWith(currentMonth);
+                        const isExpense = exp.type === 'expense';
+                        
+                        return isMatch && isCurrentMonth && isExpense;
+                      })
+                      .reduce((sum, exp) => sum + exp.amount, 0);
+                    
+                    const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
+                    const isOverBudget = percentage > 100;
+                    const isWarning = percentage > (budget.alertThreshold || 80);
+                    
+                    // Dynamic color based on progress
+                    const progressColor = isOverBudget ? '#EF4444' : isWarning ? '#F59E0B' : '#10B981';
+                    const gradientColors = isOverBudget 
+                      ? ['#FEE2E2', '#FECACA'] as const
+                      : isWarning 
+                        ? ['#FEF3C7', '#FDE68A'] as const
+                        : ['#D1FAE5', '#A7F3D0'] as const;
+
+                    return (
+                      <Animated.View
+                        key={budget.id}
+                        entering={FadeInRight.delay(500 + index * 100)}
+                        style={[
+                          styles.budgetOverviewCard,
+                          { backgroundColor: isDarkTheme ? '#1f2937' : '#ffffff' }
+                        ]}
+                      >
+                        <LinearGradient
+                          colors={isDarkTheme 
+                            ? ['#1f2937', '#374151'] as const
+                            : gradientColors
+                          }
+                          style={styles.budgetOverviewCardGradient}
+                        >
+                          {/* Budget Category & Icon */}
+                          <View style={styles.budgetOverviewCardHeader}>
+                            <View style={[styles.budgetOverviewCategoryIcon, { backgroundColor: progressColor + '20' }]}>
+                              <Ionicons name="receipt-outline" size={16} color={progressColor} />
+                            </View>
+                            <Text style={[
+                              styles.budgetOverviewCardCategory, 
+                              { color: isDarkTheme ? '#ffffff' : '#1f2937' }
+                            ]} numberOfLines={1}>
+                              {budget.category}
+                            </Text>
+                          </View>
+
+                          {/* Progress Circle */}
+                          <View style={styles.budgetOverviewProgressContainer}>
+                            <View style={[styles.budgetOverviewProgressCircle, { borderColor: progressColor + '30' }]}>
+                              <View style={[
+                                styles.budgetOverviewProgressInnerCircle,
+                                { backgroundColor: progressColor + '20' }
+                              ]}>
+                                <Text style={[styles.budgetOverviewProgressText, { color: progressColor }]}>
+                                  {Math.round(percentage)}%
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          {/* Amount Details */}
+                          <View style={styles.budgetOverviewAmountSection}>
+                            <Text style={[
+                              styles.budgetOverviewSpentAmount, 
+                              { color: isDarkTheme ? '#e5e7eb' : '#374151' }
+                            ]}>
+                              ₹{spent.toLocaleString('en-IN')}
+                            </Text>
+                            <Text style={[
+                              styles.budgetOverviewTotalAmount, 
+                              { color: isDarkTheme ? '#9ca3af' : '#6b7280' }
+                            ]}>
+                              of ₹{budget.amount.toLocaleString('en-IN')}
+                            </Text>
+                          </View>
+
+                          {/* Status Badge */}
+                          {(isOverBudget || isWarning) && (
+                            <View style={[
+                              styles.budgetOverviewStatusBadge,
+                              { backgroundColor: progressColor }
+                            ]}>
+                              <Ionicons 
+                                name={isOverBudget ? "warning" : "alert-circle"} 
+                                size={10} 
+                                color="white" 
+                              />
+                              <Text style={styles.budgetOverviewStatusText}>
+                                {isOverBudget ? 'Over' : 'Alert'}
+                              </Text>
+                            </View>
+                          )}
+
+                          {/* Progress Bar */}
+                          <View style={[
+                            styles.budgetOverviewProgressBar,
+                            { backgroundColor: isDarkTheme ? '#374151' : '#e5e7eb' }
+                          ]}>
+                            <Animated.View
+                              style={[
+                                styles.budgetOverviewProgressFill,
+                                {
+                                  width: `${Math.min(percentage, 100)}%`,
+                                  backgroundColor: progressColor
+                                }
+                              ]}
+                            />
+                          </View>
+                        </LinearGradient>
+                      </Animated.View>
+                    );
+                  })}
+                  </View>
+                </>
+              ) : (
+                <View style={styles.budgetOverviewEmptyState}>
+                  <LinearGradient
+                    colors={isDarkTheme ? ['#1f2937', '#374151'] : ['#f8fafc', '#f1f5f9']}
+                    style={styles.budgetOverviewEmptyCard}
+                  >
+                    <Ionicons 
+                      name="wallet-outline" 
+                      size={48} 
+                      color={isDarkTheme ? '#6b7280' : '#9ca3af'} 
+                    />
+                    <Text style={[
+                      styles.budgetOverviewEmptyTitle, 
+                      { color: isDarkTheme ? '#d1d5db' : '#374151' }
+                    ]}>
+                      No Budgets Yet
+                    </Text>
+                    <Text style={[
+                      styles.budgetOverviewEmptySubtitle, 
+                      { color: isDarkTheme ? '#9ca3af' : '#6b7280' }
+                    ]}>
+                      Create your first budget to start tracking spending
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setActiveTab('budgets')}
+                      style={styles.budgetOverviewEmptyButton}
+                    >
+                      <LinearGradient
+                        colors={['#667eea', '#764ba2']}
+                        style={styles.budgetOverviewEmptyButtonGradient}
+                      >
+                        <Ionicons name="add" size={16} color="white" />
+                        <Text style={styles.budgetOverviewEmptyButtonText}>Create Budget</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </LinearGradient>
+                </View>
               )}
-            </View>
+            </Animated.View>
           </Animated.View>
         )}
 
         {activeTab === 'budgets' && (
-          <BudgetsTab
+          <BudgetTab
             budgets={budgets}
             transactions={transactions}
-            onDeleteBudget={deleteBudget}
             isDarkTheme={isDarkTheme}
+            onAddBudget={() => setShowAddBudget(true)}
           />
         )}
 
         {activeTab === 'goals' && (
-          <SavingsGoalsTab
-            goals={savingsGoals}
+          <SavingsTab
+            savingsGoals={savingsGoals}
+            isDarkTheme={isDarkTheme}
+            onAddSavings={() => {
+              setEditingSavingsGoal(null);
+              setShowAddGoal(true);
+            }}
             onDeleteGoal={deleteSavingsGoal}
             onUpdateProgress={updateSavingsGoalProgress}
-            isDarkTheme={isDarkTheme}
+            onEditGoal={(goal) => {
+              setEditingSavingsGoal(goal);
+              setShowAddGoal(true);
+            }}
           />
         )}
 
         {activeTab === 'recurring' && (
           <RecurringTab
-            recurring={recurringTransactions}
-            onToggleStatus={toggleRecurringStatus}
-            onDeleteRecurring={deleteRecurringTransaction}
+            recurrences={recurringTransactions}
+            onAddRecurring={() => {
+              setEditingRecurrence(null);
+              setShowAddRecurring(true);
+            }}
+            onEditRecurring={(recurrence) => {
+              setEditingRecurrence(recurrence);
+              setShowAddRecurring(true);
+            }}
             isDarkTheme={isDarkTheme}
           />
         )}
@@ -792,205 +748,48 @@ export default function ExploreDashboard() {
             transactions={transactions}
             budgets={budgets}
             isDarkTheme={isDarkTheme}
+            aiInsights={aiInsights}
+            insightsLoading={insightsLoading}
+            onRefreshInsights={loadAIInsights}
+          />
+        )}
+
+        {activeTab === 'scanner-history' && (
+          <ScannerHistoryTab
+            isDarkTheme={isDarkTheme}
           />
         )}
       </ScrollView>
 
-      {/* Add Recurring Transaction Modal */}
-      <Modal visible={showAddRecurring} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: isDarkTheme ? '#1f2937' : '#ffffff' }]}>
-            <Text style={[styles.modalTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Add Recurring Transaction</Text>
-            
-            <TextInput
-              style={[styles.input, { backgroundColor: isDarkTheme ? '#374151' : '#f3f4f6', color: isDarkTheme ? '#ffffff' : '#1f2937' }]}
-              placeholder="Title"
-              placeholderTextColor={isDarkTheme ? "#9ca3af" : "#6b7280"}
-              value={recurringForm.title}
-              onChangeText={(text) => setRecurringForm({...recurringForm, title: text})}
-            />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Amount"
-              placeholderTextColor="#9ca3af"
-              keyboardType="numeric"
-              value={recurringForm.amount}
-              onChangeText={(text) => setRecurringForm({...recurringForm, amount: text})}
-            />
+      {/* Add Recurring Transaction Dialog */}
+      <AddRecurringDialog
+        visible={showAddRecurring}
+        onClose={() => {
+          setShowAddRecurring(false);
+          setEditingRecurrence(null);
+        }}
+        editingRecurrence={editingRecurrence}
+        isDarkTheme={isDarkTheme}
+      />
 
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={recurringForm.category}
-                style={styles.picker}
-                onValueChange={(itemValue) => setRecurringForm({...recurringForm, category: itemValue})}
-              >
-                <Picker.Item label="Select Category" value="" />
-                {categories.map((cat) => (
-                  <Picker.Item key={cat} label={cat} value={cat} />
-                ))}
-              </Picker>
-            </View>
+      {/* Add Budget Dialog */}
+      <AddBudgetDialog
+        visible={showAddBudget}
+        onClose={() => setShowAddBudget(false)}
+        isDarkTheme={isDarkTheme}
+      />
 
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={recurringForm.type}
-                style={styles.picker}
-                onValueChange={(itemValue) => setRecurringForm({...recurringForm, type: itemValue})}
-              >
-                <Picker.Item label="Expense" value="expense" />
-                <Picker.Item label="Income" value="income" />
-              </Picker>
-            </View>
-
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={recurringForm.frequency}
-                style={styles.picker}
-                onValueChange={(itemValue) => setRecurringForm({...recurringForm, frequency: itemValue})}
-              >
-                <Picker.Item label="Daily" value="daily" />
-                <Picker.Item label="Weekly" value="weekly" />
-                <Picker.Item label="Monthly" value="monthly" />
-                <Picker.Item label="Yearly" value="yearly" />
-              </Picker>
-            </View>
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowAddRecurring(false)}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={addRecurringTransaction}
-              >
-                <Text style={styles.buttonText}>Add</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Add Budget Modal */}
-      <Modal visible={showAddBudget} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Create Budget</Text>
-            
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={budgetForm.category}
-                style={styles.picker}
-                onValueChange={(itemValue) => setBudgetForm({...budgetForm, category: itemValue})}
-              >
-                <Picker.Item label="Select Category" value="" />
-                {categories.map((cat) => (
-                  <Picker.Item key={cat} label={cat} value={cat} />
-                ))}
-              </Picker>
-            </View>
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Budget Amount"
-              placeholderTextColor="#9ca3af"
-              keyboardType="numeric"
-              value={budgetForm.amount}
-              onChangeText={(text) => setBudgetForm({...budgetForm, amount: text})}
-            />
-
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={budgetForm.period}
-                style={styles.picker}
-                onValueChange={(itemValue) => setBudgetForm({...budgetForm, period: itemValue})}
-              >
-                <Picker.Item label="Weekly" value="weekly" />
-                <Picker.Item label="Monthly" value="monthly" />
-                <Picker.Item label="Yearly" value="yearly" />
-              </Picker>
-            </View>
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowAddBudget(false)}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={addBudget}
-              >
-                <Text style={styles.buttonText}>Create</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Add Goal Modal */}
-      <Modal visible={showAddGoal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Create Savings Goal</Text>
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Goal Name"
-              placeholderTextColor="#9ca3af"
-              value={goalForm.name}
-              onChangeText={(text) => setGoalForm({...goalForm, name: text})}
-            />
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Target Amount"
-              placeholderTextColor="#9ca3af"
-              keyboardType="numeric"
-              value={goalForm.targetAmount}
-              onChangeText={(text) => setGoalForm({...goalForm, targetAmount: text})}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Target Date (YYYY-MM-DD)"
-              placeholderTextColor="#9ca3af"
-              value={goalForm.targetDate}
-              onChangeText={(text) => setGoalForm({...goalForm, targetDate: text})}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Description (optional)"
-              placeholderTextColor="#9ca3af"
-              value={goalForm.description}
-              onChangeText={(text) => setGoalForm({...goalForm, description: text})}
-              multiline
-              numberOfLines={3}
-            />
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowAddGoal(false)}
-              >
-                <Text style={styles.buttonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={addSavingsGoal}
-              >
-                <Text style={styles.buttonText}>Create</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+      {/* Add Savings Goal Dialog */}
+      <AddSavingsGoalDialog
+        visible={showAddGoal}
+        onClose={() => {
+          setShowAddGoal(false);
+          setEditingSavingsGoal(null);
+        }}
+        editingGoal={editingSavingsGoal}
+        isDarkTheme={isDarkTheme}
+      />
+    </View>
   );
 }
 
@@ -1012,322 +811,221 @@ function QuickActionCard({ title, icon, color, onPress }: {
   );
 }
 
-// Component: Budgets Tab
-function BudgetsTab({ budgets, transactions, onDeleteBudget, isDarkTheme }: {
-  budgets: Budget[];
-  transactions: Transaction[];
-  onDeleteBudget: (id: string) => void;
-  isDarkTheme: boolean;
-}) {
-  return (
-    <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
-      <View style={styles.sectionTitleRow}>
-        <Ionicons name="wallet-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
-        <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Budget Management</Text>
-      </View>
-      
-      {budgets.map((budget) => {
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        
-        // More flexible category matching
-        const spent = transactions
-          .filter((exp: Transaction) => {
-            const expenseCategory = exp.category?.toLowerCase() || '';
-            const budgetCategory = budget.category?.toLowerCase() || '';
-            
-            // Exact match or partial match for categories like "Food & Dining" vs "Food"
-            const isMatch = expenseCategory === budgetCategory ||
-                          expenseCategory.includes(budgetCategory) ||
-                          budgetCategory.includes(expenseCategory);
-            
-            const isCurrentMonth = exp.date.startsWith(currentMonth);
-            const isExpense = exp.type === 'expense';
-            
-            return isMatch && isCurrentMonth && isExpense;
-          })
-          .reduce((sum: number, exp: Transaction) => sum + exp.amount, 0);
-        
-        const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
-        const isOverBudget = percentage > 100;
-        const isWarning = percentage > (budget.alertThreshold || 80);
-
-        return (
-          <LinearGradient
-            key={budget.id}
-            colors={['#1f2937', '#374151']}
-            style={styles.budgetCard}
-          >
-            <View style={styles.budgetHeader}>
-              <Text style={styles.budgetCategory}>{budget.category}</Text>
-              <TouchableOpacity
-                onPress={() => onDeleteBudget(budget.id!)}
-                style={styles.deleteButton}
-              >
-                <Ionicons name="trash-outline" size={16} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={[
-              styles.budgetPercentageText,
-              { color: isOverBudget ? '#ef4444' : isWarning ? '#f59e0b' : '#10b981' }
-            ]}>
-              {percentage.toFixed(1)}% used
-            </Text>
-            
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${Math.min(percentage, 100)}%`,
-                    backgroundColor: isOverBudget ? '#ef4444' : isWarning ? '#f59e0b' : '#10b981'
-                  }
-                ]}
-              />
-            </View>
-            
-            <Text style={styles.budgetAmount}>
-              ₹{spent.toFixed(2)} / ₹{budget.amount.toFixed(2)}
-            </Text>
-            <Text style={styles.budgetPeriod}>Period: {budget.period}</Text>
-          </LinearGradient>
-        );
-      })}
-      
-      {budgets.length === 0 && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No budgets created yet</Text>
-          <Text style={styles.emptyStateSubtext}>Create your first budget to start tracking spending</Text>
-        </View>
-      )}
-    </Animated.View>
-  );
-}
-
 // Component: Savings Goals Tab
-function SavingsGoalsTab({ goals, onDeleteGoal, onUpdateProgress, isDarkTheme }: {
-  goals: SavingsGoal[];
-  onDeleteGoal: (id: string) => void;
-  onUpdateProgress: (goalId: string, additionalAmount: number) => void;
+// Component: Scanner History Tab
+function ScannerHistoryTab({ isDarkTheme }: {
   isDarkTheme: boolean;
 }) {
+  const [scannerExpenses, setScannerExpenses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const loadScannerHistory = async () => {
+      try {
+        const expenses = await EnhancedFirebaseService.getScannerExpenses();
+        setScannerExpenses(expenses);
+      } catch (error) {
+        console.error('Error loading scanner history:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadScannerHistory();
+  }, []);
+
+  const toggleExpanded = (expenseId: string) => {
+    const newExpanded = new Set(expandedItems);
+    if (newExpanded.has(expenseId)) {
+      newExpanded.delete(expenseId);
+    } else {
+      newExpanded.add(expenseId);
+    }
+    setExpandedItems(newExpanded);
+  };
+
+  const formatCurrency = (amount: number | undefined | null) => {
+    // Handle undefined, null, NaN, or invalid numbers
+    if (amount === undefined || amount === null || isNaN(amount) || typeof amount !== 'number') {
+      return '₹0.00';
+    }
+    return `₹${amount.toFixed(2)}`;
+  };
+
+  const safeToFixed = (value: number | undefined | null, decimals: number = 2): string => {
+    if (value === undefined || value === null || isNaN(value) || typeof value !== 'number') {
+      if (decimals === 0) return '0';
+      return '0.' + '0'.repeat(decimals);
+    }
+    return value.toFixed(decimals);
+  };
+
+  if (loading) {
+    return (
+      <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
+        <View style={styles.sectionTitleRow}>
+          <Ionicons name="scan-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
+          <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Scanner History</Text>
+        </View>
+        <View style={styles.loadingState}>
+          <Text style={[styles.loadingText, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>Loading scanner history...</Text>
+        </View>
+      </Animated.View>
+    );
+  }
+
   return (
     <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
       <View style={styles.sectionTitleRow}>
-        <Ionicons name="flag-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
-        <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Savings Goals</Text>
+        <Ionicons name="scan-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
+        <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Scanner History</Text>
       </View>
       
-      {goals.map((goal) => {
-        const percentage = (goal.currentAmount / goal.targetAmount) * 100;
-        const isCompleted = percentage >= 100;
-        const remainingDays = Math.ceil((new Date(goal.targetDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-
+      {scannerExpenses.map((expense) => {
+        const isExpanded = expandedItems.has(expense.id);
+        const subtotal = parseFloat(expense.subtotalAmount) || 0;
+        const gst = parseFloat(expense.gstAmount) || 0;
+        const totalWithGST = subtotal + gst;
+        
         return (
           <LinearGradient
-            key={goal.id}
-            colors={['#1f2937', '#374151']}
-            style={styles.goalCard}
+            key={expense.id}
+            colors={isDarkTheme ? ['#1f2937', '#374151'] : ['#ffffff', '#f8fafc']}
+            style={[styles.scannerExpenseCard, { borderColor: isDarkTheme ? '#374151' : '#e2e8f0' }]}
           >
-            <View style={styles.goalHeader}>
-              <Text style={styles.goalName}>{goal.name}</Text>
-              <TouchableOpacity
-                onPress={() => onDeleteGoal(goal.id!)}
-                style={styles.deleteButton}
-              >
-                <Ionicons name="trash-outline" size={16} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={[
-              styles.goalPercentage,
-              { color: isCompleted ? '#10b981' : '#06b6d4' }
-            ]}>
-              {percentage.toFixed(1)}% complete
-            </Text>
-            
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${Math.min(percentage, 100)}%`,
-                    backgroundColor: isCompleted ? '#10b981' : '#06b6d4'
-                  }
-                ]}
-              />
-            </View>
-            
-            <Text style={styles.goalAmount}>
-              ₹{goal.currentAmount.toFixed(2)} / ₹{goal.targetAmount.toFixed(2)}
-            </Text>
-
-            {!isCompleted && (
-              <View style={styles.goalActions}>
-                <TouchableOpacity
-                  style={[styles.goalActionButton, { backgroundColor: '#10b981' }]}
-                  onPress={() => {
-                    Alert.prompt(
-                      'Add Money',
-                      'Enter amount to add to this goal:',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Add',
-                          onPress: (amount) => {
-                            const numAmount = parseFloat(amount || '0');
-                            if (numAmount > 0) {
-                              onUpdateProgress(goal.id!, numAmount);
-                            }
-                          }
-                        }
-                      ],
-                      'plain-text',
-                      '',
-                      'numeric'
-                    );
-                  }}
-                >
-                  <View style={styles.goalActionRow}>
-                    <Ionicons name="add-circle" size={16} color="#ffffff" />
-                    <Text style={styles.goalActionText}>Add Money</Text>
-                  </View>
-                </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => toggleExpanded(expense.id)}
+              style={styles.scannerExpenseHeader}
+            >
+              <View style={styles.scannerExpenseMainInfo}>
+                <View style={styles.scannerExpenseTitle}>
+                  <Ionicons 
+                    name="receipt" 
+                    size={20} 
+                    color={isDarkTheme ? '#10b981' : '#059669'} 
+                    style={styles.scannerIcon}
+                  />
+                  <Text style={[styles.scannerMerchantName, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                    {expense.merchantName || 'Unknown Merchant'}
+                  </Text>
+                </View>
                 
-                <TouchableOpacity
-                  style={[styles.goalActionButton, { backgroundColor: '#6366f1' }]}
-                  onPress={() => {
-                    Alert.alert(
-                      'Complete Goal',
-                      'Mark this goal as completed?',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Complete',
-                          onPress: () => {
-                            const remainingAmount = goal.targetAmount - goal.currentAmount;
-                            onUpdateProgress(goal.id!, remainingAmount);
-                          }
-                        }
-                      ]
-                    );
-                  }}
-                >
-                  <Text style={styles.goalActionText}>✅ Complete</Text>
-                </TouchableOpacity>
+                <View style={styles.scannerExpenseAmountSection}>
+                  <Text style={[styles.scannerTotalAmount, { color: isDarkTheme ? '#10b981' : '#059669' }]}>
+                    {formatCurrency(totalWithGST)}
+                  </Text>
+                  <Text style={[styles.scannerDate, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>
+                    {new Date(expense.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
               </View>
-            )}
 
-            <Text style={styles.goalDays}>
-              {remainingDays > 0 ? `${remainingDays} days remaining` : 'Goal deadline passed'}
-            </Text>
-            
-            {goal.description && (
-              <Text style={styles.goalDescription}>{goal.description}</Text>
-            )}
+              <View style={styles.scannerExpenseSecondaryInfo}>
+                <View style={styles.scannerCategoryBadge}>
+                  <Text style={[styles.scannerCategoryText, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                    {expense.category || 'Other'}
+                  </Text>
+                </View>
+                
+                <Ionicons 
+                  name={isExpanded ? 'chevron-up' : 'chevron-down'} 
+                  size={20} 
+                  color={isDarkTheme ? '#9ca3af' : '#64748b'} 
+                />
+              </View>
+            </TouchableOpacity>
 
-            <View style={styles.goalFooter}>
-              <Text style={[
-                styles.priorityBadge,
-                { backgroundColor:
-                  goal.priority === 'high' ? '#ef4444' :
-                  goal.priority === 'medium' ? '#f59e0b' : '#10b981'
-                }
-              ]}>
-                {goal.priority.toUpperCase()}
-              </Text>
-            </View>
+            {isExpanded && (
+              <Animated.View entering={FadeInDown.duration(300)} style={styles.scannerExpenseDetails}>
+                <View style={styles.scannerDetailsSection}>
+                  <Text style={[styles.scannerDetailsSectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                    Transaction Details
+                  </Text>
+                  
+                  <View style={styles.scannerDetailsGrid}>
+                    <View style={styles.scannerDetailItem}>
+                      <Text style={[styles.scannerDetailLabel, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>Subtotal:</Text>
+                      <Text style={[styles.scannerDetailValue, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                        {formatCurrency(expense.subtotalAmount)}
+                      </Text>
+                    </View>
+                    
+                    {gst > 0 && (
+                      <View style={styles.scannerDetailItem}>
+                        <Text style={[styles.scannerDetailLabel, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>GST:</Text>
+                        <Text style={[styles.scannerDetailValue, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                          {formatCurrency(gst)}
+                        </Text>
+                      </View>
+                    )}
+                    
+                    <View style={styles.scannerDetailItem}>
+                      <Text style={[styles.scannerDetailLabel, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>Total:</Text>
+                      <Text style={[styles.scannerDetailValue, { color: isDarkTheme ? '#10b981' : '#059669', fontWeight: 'bold' }]}>
+                        {formatCurrency(totalWithGST)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {expense.items && expense.items.length > 0 && (
+                  <View style={styles.scannerDetailsSection}>
+                    <Text style={[styles.scannerDetailsSectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                      Items ({expense.items.length})
+                    </Text>
+                    
+                    {expense.items.slice(0, 5).map((item: any, index: number) => (
+                      <View key={index} style={styles.scannerItemRow}>
+                        <Text style={[styles.scannerItemName, { color: isDarkTheme ? '#e5e7eb' : '#374151' }]} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <View style={styles.scannerItemDetails}>
+                          {item.quantity && (
+                            <Text style={[styles.scannerItemQuantity, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>
+                              ×{item.quantity}
+                            </Text>
+                          )}
+                          <Text style={[styles.scannerItemPrice, { color: isDarkTheme ? '#10b981' : '#059669' }]}>
+                            {formatCurrency(item.price)}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                    
+                    {expense.items.length > 5 && (
+                      <Text style={[styles.scannerItemsMore, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>
+                        +{expense.items.length - 5} more items
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {expense.notes && (
+                  <View style={styles.scannerDetailsSection}>
+                    <Text style={[styles.scannerDetailsSectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>
+                      Notes
+                    </Text>
+                    <Text style={[styles.scannerNotesText, { color: isDarkTheme ? '#e5e7eb' : '#374151' }]}>
+                      {expense.notes}
+                    </Text>
+                  </View>
+                )}
+              </Animated.View>
+            )}
           </LinearGradient>
         );
       })}
       
-      {goals.length === 0 && (
+      {scannerExpenses.length === 0 && (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No savings goals created yet</Text>
-          <Text style={styles.emptyStateSubtext}>Set your first goal to start saving</Text>
-        </View>
-      )}
-    </Animated.View>
-  );
-}
-
-// Component: Recurring Tab
-function RecurringTab({ recurring, onToggleStatus, onDeleteRecurring, isDarkTheme }: {
-  recurring: RecurringTransaction[];
-  onToggleStatus: (recurringId: string) => void;
-  onDeleteRecurring: (recurringId: string) => void;
-  isDarkTheme: boolean;
-}) {
-  return (
-    <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
-      <View style={styles.sectionTitleRow}>
-        <Ionicons name="repeat-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
-        <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Recurring Transactions</Text>
-      </View>
-      
-      {recurring.map((item) => (
-        <LinearGradient
-          key={item.id}
-          colors={['#1f2937', '#374151']}
-          style={styles.recurringCard}
-        >
-          <View style={styles.recurringHeader}>
-            <Text style={styles.recurringTitle}>{item.title}</Text>
-            <View style={[
-              styles.statusBadge,
-              { backgroundColor: item.isActive ? '#10b981' : '#ef4444' }
-            ]}>
-              <Text style={styles.statusText}>
-                {item.isActive ? 'Active' : 'Paused'}
-              </Text>
-            </View>
-          </View>
-          
-          <Text style={styles.recurringAmount}>
-            ₹{item.amount.toFixed(2)} • {item.frequency}
+          <Ionicons name="scan-outline" size={48} color={isDarkTheme ? '#4b5563' : '#9ca3af'} />
+          <Text style={[styles.emptyStateText, { color: isDarkTheme ? '#9ca3af' : '#64748b' }]}>
+            No receipt scans yet
           </Text>
-          <Text style={styles.recurringCategory}>{item.category}</Text>
-          <Text style={styles.recurringNext}>
-            Next due: {new Date(item.nextDue).toLocaleDateString()}
+          <Text style={[styles.emptyStateSubtext, { color: isDarkTheme ? '#6b7280' : '#9ca3af' }]}>
+            Use the scanner in the main app to scan receipts
           </Text>
-
-          <View style={styles.recurringActions}>
-            <TouchableOpacity
-              style={[
-                styles.recurringActionButton,
-                { backgroundColor: item.isActive ? '#f59e0b' : '#10b981' }
-              ]}
-              onPress={() => onToggleStatus(item.id!)}
-            >
-              <View style={styles.recurringActionRow}>
-                <Ionicons 
-                  name={item.isActive ? 'pause-outline' : 'play-outline'} 
-                  size={14} 
-                  color="white" 
-                />
-                <Text style={styles.recurringActionText}>
-                  {item.isActive ? 'Pause' : 'Resume'}
-                </Text>
-              </View>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.recurringActionButton, { backgroundColor: '#ef4444' }]}
-              onPress={() => onDeleteRecurring(item.id!)}
-            >
-              <View style={styles.recurringActionRow}>
-                <Ionicons name="trash-outline" size={14} color="white" />
-                <Text style={styles.recurringActionText}>Delete</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </LinearGradient>
-      ))}
-      
-      {recurring.length === 0 && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No recurring transactions set up</Text>
-          <Text style={styles.emptyStateSubtext}>Add recurring transactions to automate your finances</Text>
         </View>
       )}
     </Animated.View>
@@ -1335,92 +1033,340 @@ function RecurringTab({ recurring, onToggleStatus, onDeleteRecurring, isDarkThem
 }
 
 // Component: Insights Tab
-function InsightsTab({ suggestions, transactions, budgets, isDarkTheme }: {
+function InsightsTab({ 
+  suggestions, 
+  transactions, 
+  budgets, 
+  isDarkTheme, 
+  aiInsights, 
+  insightsLoading, 
+  onRefreshInsights 
+}: {
   suggestions: SmartSuggestion[];
   transactions: Transaction[];
   budgets: Budget[];
   isDarkTheme: boolean;
+  aiInsights: AIInsightsData | null;
+  insightsLoading: boolean;
+  onRefreshInsights: () => void;
 }) {
-  const totalExpenses = transactions
-    .filter((exp: Transaction) => exp.type === 'expense')
-    .reduce((sum: number, exp: Transaction) => sum + exp.amount, 0);
+  const colors = {
+    background: isDarkTheme ? '#0f172a' : '#ffffff',
+    surface: isDarkTheme ? '#1e293b' : '#f8fafc',
+    primary: '#3b82f6',
+    success: '#10b981',
+    warning: '#f59e0b',
+    error: '#ef4444',
+    text: isDarkTheme ? '#f8fafc' : '#1e293b',
+    textSecondary: isDarkTheme ? '#cbd5e1' : '#64748b',
+    textMuted: isDarkTheme ? '#94a3b8' : '#9ca3af',
+    border: isDarkTheme ? '#374151' : '#e5e7eb'
+  };
 
-  const totalIncome = transactions
-    .filter((exp: Transaction) => exp.type === 'income')
-    .reduce((sum: number, exp: Transaction) => sum + exp.amount, 0);
+  const getHealthScoreColor = (score: number) => {
+    if (score >= 80) return colors.success;
+    if (score >= 60) return colors.warning;
+    return colors.error;
+  };
 
-  const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return colors.error;
+      case 'medium': return colors.warning;
+      default: return colors.success;
+    }
+  };
+
+  if (insightsLoading) {
+    return (
+      <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
+        <View style={styles.loadingInsightsContainer}>
+          <Ionicons name="analytics" size={48} color={colors.primary} />
+          <Text style={[styles.loadingInsightsText, { color: colors.textSecondary }]}>
+            Analyzing your financial data...
+          </Text>
+        </View>
+      </Animated.View>
+    );
+  }
+
+  if (!aiInsights) {
+    return (
+      <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
+        <View style={styles.sectionTitleRow}>
+          <Ionicons name="bulb-outline" size={24} color={colors.text} />
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>AI Insights</Text>
+          <TouchableOpacity onPress={onRefreshInsights} style={styles.refreshInsightsButton}>
+            <Ionicons name="refresh" size={20} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.emptyInsightsState}>
+          <Ionicons name="analytics" size={48} color={colors.textMuted} />
+          <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
+            No insights available yet
+          </Text>
+          <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
+            Add more transactions to get AI-powered insights
+          </Text>
+          <TouchableOpacity 
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            onPress={onRefreshInsights}
+          >
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    );
+  }
 
   return (
     <Animated.View entering={FadeInUp.duration(500)} style={styles.tabContent}>
       <View style={styles.sectionTitleRow}>
-        <Ionicons name="bulb-outline" size={24} color={isDarkTheme ? '#ffffff' : '#1f2937'} />
-        <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#ffffff' : '#1f2937' }]}>Smart Insights</Text>
+        <Ionicons name="bulb-outline" size={24} color={colors.text} />
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>AI Insights</Text>
+        <TouchableOpacity onPress={onRefreshInsights} style={styles.refreshInsightsButton}>
+          <Ionicons name="refresh" size={20} color={colors.primary} />
+        </TouchableOpacity>
       </View>
       
-      {/* Financial Overview */}
+      {/* Financial Health Card */}
+      {aiInsights.financial_health && (
       <LinearGradient
-        colors={['#1f2937', '#374151']}
-        style={styles.insightCard}
+        colors={[colors.primary, '#60a5fa']}
+        style={styles.healthInsightCard}
       >
-        <Text style={styles.insightTitle}>Financial Health Score</Text>
-        <View style={styles.insightRow}>
-          <Text style={styles.insightLabel}>Savings Rate:</Text>
-          <Text style={[
-            styles.insightValue,
-            { color: savingsRate > 20 ? '#10b981' : savingsRate > 10 ? '#f59e0b' : '#ef4444' }
-          ]}>
-            {savingsRate.toFixed(1)}%
+        <View style={styles.healthInsightHeader}>
+          <View style={styles.healthInsightTitleRow}>
+            <Ionicons name="fitness" size={24} color="#ffffff" />
+            <Text style={styles.healthInsightTitle}>Financial Health</Text>
+          </View>
+          <View style={styles.healthInsightScore}>
+            <Text style={styles.healthInsightScoreText}>
+              {aiInsights.financial_health.health_score || 0}
+            </Text>
+          </View>
+        </View>
+        
+        <View style={styles.healthInsightMetrics}>
+          <View style={styles.healthInsightMetric}>
+            <Text style={styles.healthInsightMetricLabel}>Total Spending</Text>
+            <Text style={styles.healthInsightMetricValue}>
+              ₹{(aiInsights.financial_health.total_spending || 0).toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.healthInsightMetric}>
+            <Text style={styles.healthInsightMetricLabel}>Avg Transaction</Text>
+            <Text style={styles.healthInsightMetricValue}>
+              ₹{(aiInsights.financial_health.average_transaction || 0).toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.healthInsightMetric}>
+            <Text style={styles.healthInsightMetricLabel}>Transactions</Text>
+            <Text style={styles.healthInsightMetricValue}>
+              {aiInsights.financial_health.transaction_count || 0}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.trendInsightIndicator}>
+          <Ionicons
+            name={(aiInsights.financial_health.spending_trend || 'stable') === 'increasing' ? 'trending-up' : 
+                 (aiInsights.financial_health.spending_trend || 'stable') === 'decreasing' ? 'trending-down' : 'remove'}
+            size={20}
+            color="#ffffff"
+          />
+          <Text style={styles.trendInsightText}>
+            {(aiInsights.financial_health.spending_change_percent || 0) > 0 ? '+' : ''}{aiInsights.financial_health.spending_change_percent || 0}% from last period
           </Text>
         </View>
-        <View style={styles.insightRow}>
-          <Text style={styles.insightLabel}>Active Budgets:</Text>
-          <Text style={styles.insightValue}>{budgets.length}</Text>
-        </View>
-        <View style={styles.insightRow}>
-          <Text style={styles.insightLabel}>This Month Transactions:</Text>
-          <Text style={styles.insightValue}>{transactions.length}</Text>
-        </View>
       </LinearGradient>
+      )}
 
-      {/* AI Suggestions */}
-      {suggestions.map((suggestion) => (
-        <LinearGradient
-          key={suggestion.id}
-          colors={['#1f2937', '#374151']}
-          style={[
-            styles.suggestionCard,
-            { borderLeftWidth: 4, borderLeftColor: 
-              suggestion.priority === 'high' ? '#ef4444' :
-              suggestion.priority === 'medium' ? '#f59e0b' : '#10b981'
-            }
-          ]}
-        >
-          <Text style={styles.suggestionTitle}>{suggestion.title}</Text>
-          <Text style={styles.suggestionDescription}>{suggestion.description}</Text>
-          <View style={styles.suggestionFooter}>
-            <Text style={[
-              styles.priorityBadge,
-              { backgroundColor:
-                suggestion.priority === 'high' ? '#ef4444' :
-                suggestion.priority === 'medium' ? '#f59e0b' : '#10b981'
-              }
-            ]}>
-              {suggestion.priority.toUpperCase()}
-            </Text>
-            <Text style={styles.suggestionType}>{suggestion.type}</Text>
-          </View>
-        </LinearGradient>
-      ))}
-      
-      {suggestions.length === 0 && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No insights available yet</Text>
-          <Text style={styles.emptyStateSubtext}>Add more transactions to get AI-powered insights</Text>
+      {/* Spending Insights */}
+      {aiInsights.spending_insights && aiInsights.spending_insights.length > 0 && (
+        <View style={styles.insightsSection}>
+          <Text style={[styles.insightsSectionTitle, { color: colors.text }]}>
+            💡 Spending Insights
+          </Text>
+          {aiInsights.spending_insights.map((insight, index) => (
+            <View key={index} style={[styles.aiInsightCard, { backgroundColor: colors.surface }]}>
+              <View style={styles.aiInsightHeader}>
+                <View style={[
+                  styles.aiInsightPriorityDot, 
+                  { backgroundColor: getPriorityColor(insight.priority) }
+                ]} />
+                <Text style={[styles.aiInsightTitle, { color: colors.text }]}>
+                  {insight.title}
+                </Text>
+                <View style={[
+                  styles.aiInsightPriorityBadge, 
+                  { backgroundColor: getPriorityColor(insight.priority) + '20' }
+                ]}>
+                  <Text style={[
+                    styles.aiInsightPriorityText, 
+                    { color: getPriorityColor(insight.priority) }
+                  ]}>
+                    {insight.priority.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.aiInsightDescription, { color: colors.textSecondary }]}>
+                {insight.description}
+              </Text>
+              <Text style={[styles.aiInsightSuggestion, { color: colors.textMuted }]}>
+                💡 {insight.suggestion}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Smart Suggestions */}
+      {aiInsights.smart_suggestions && aiInsights.smart_suggestions.length > 0 && (
+        <View style={styles.suggestionsSection}>
+          <Text style={[styles.suggestionsSectionTitle, { color: colors.text }]}>
+            🎯 Smart Suggestions
+          </Text>
+          {aiInsights.smart_suggestions.map((suggestion, index) => (
+            <TouchableOpacity 
+              key={index} 
+              style={[styles.aiSuggestionCard, { backgroundColor: colors.surface }]}
+              onPress={() => {
+                if (suggestion.actionable) {
+                  Alert.alert(
+                    suggestion.title,
+                    suggestion.description + 
+                    (suggestion.suggested_amount ? `\n\nSuggested Amount: ₹${suggestion.suggested_amount}` : ''),
+                    [
+                      { text: 'Dismiss', style: 'cancel' },
+                      { text: 'Take Action', onPress: () => {
+                        console.log('Taking action for:', suggestion.type);
+                      }}
+                    ]
+                  );
+                }
+              }}
+            >
+              <View style={styles.aiSuggestionHeader}>
+                <Ionicons
+                  name={suggestion.type === 'budget_recommendation' ? 'wallet' :
+                       suggestion.type === 'savings_opportunity' ? 'trending-up' :
+                       suggestion.type === 'goal_setting' ? 'flag' : 'bulb'}
+                  size={24}
+                  color={getPriorityColor(suggestion.priority)}
+                />
+                <View style={styles.aiSuggestionTitleContainer}>
+                  <Text style={[styles.aiSuggestionTitle, { color: colors.text }]}>
+                    {suggestion.title}
+                  </Text>
+                  <View style={[
+                    styles.aiSuggestionPriorityBadge, 
+                    { backgroundColor: getPriorityColor(suggestion.priority) + '20' }
+                  ]}>
+                    <Text style={[
+                      styles.aiSuggestionPriorityText, 
+                      { color: getPriorityColor(suggestion.priority) }
+                    ]}>
+                      {suggestion.priority}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              <Text style={[styles.aiSuggestionDescription, { color: colors.textSecondary }]}>
+                {suggestion.description}
+              </Text>
+              {suggestion.suggested_amount && (
+                <View style={styles.aiSuggestionAmount}>
+                  <Text style={[styles.aiSuggestionAmountText, { color: colors.primary }]}>
+                    Suggested: ₹{(suggestion.suggested_amount || 0).toLocaleString()}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Category Analysis */}
+      {aiInsights.category_analysis && Object.keys(aiInsights.category_analysis).length > 0 && (
+        <View style={styles.categoryAnalysisSection}>
+          <Text style={[styles.categoryAnalysisSectionTitle, { color: colors.text }]}>
+            📊 Category Analysis
+          </Text>
+          {Object.entries(aiInsights.category_analysis)
+            .sort(([_, a], [__, b]) => b.total - a.total)
+            .slice(0, 5)
+            .map(([category, data], index) => (
+              <View key={category} style={[styles.categoryAnalysisCard, { backgroundColor: colors.surface }]}>
+                <View style={styles.categoryAnalysisHeader}>
+                  <Ionicons
+                    name={getCategoryIcon(category)}
+                    size={24}
+                    color={colors.primary}
+                  />
+                  <View style={styles.categoryAnalysisInfo}>
+                    <Text style={[styles.categoryAnalysisName, { color: colors.text }]}>
+                      {category}
+                    </Text>
+                    <Text style={[styles.categoryAnalysisCount, { color: colors.textSecondary }]}>
+                      {data.count || 0} transactions
+                    </Text>
+                  </View>
+                  <Text style={[styles.categoryAnalysisAmount, { color: colors.text }]}>
+                    ₹{(data.total || 0).toLocaleString()}
+                  </Text>
+                </View>
+                <View style={styles.categoryAnalysisProgress}>
+                  <View style={[styles.categoryAnalysisProgressBar, { backgroundColor: colors.border }]}>
+                    <View
+                      style={[
+                        styles.categoryAnalysisProgressFill,
+                        { backgroundColor: colors.primary, width: `${Math.min(data.percentage || 0, 100)}%` }
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.categoryAnalysisPercentage, { color: colors.textSecondary }]}>
+                    {data.percentage || 0}%
+                  </Text>
+                </View>
+              </View>
+            ))}
+        </View>
+      )}
+
+      {/* Empty state if no insights */}
+      {(!aiInsights.spending_insights || aiInsights.spending_insights.length === 0) && 
+       (!aiInsights.smart_suggestions || aiInsights.smart_suggestions.length === 0) && 
+       (!aiInsights.category_analysis || Object.keys(aiInsights.category_analysis).length === 0) && (
+        <View style={styles.emptyInsightsState}>
+          <Ionicons name="analytics" size={48} color={colors.textMuted} />
+          <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
+            No detailed insights available yet
+          </Text>
+          <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
+            Add more transactions to get personalized AI insights
+          </Text>
         </View>
       )}
     </Animated.View>
   );
+
+  // Helper function to get category icon
+  function getCategoryIcon(category: string): any {
+    const iconMap: { [key: string]: string } = {
+      'Food & Dining': 'restaurant',
+      'Transportation': 'car',
+      'Shopping': 'bag',
+      'Entertainment': 'game-controller',
+      'Healthcare': 'medical',
+      'Bills & Utilities': 'flash',
+      'Education': 'school',
+      'Travel': 'airplane',
+      'Other': 'ellipsis-horizontal'
+    };
+    return iconMap[category] || 'ellipsis-horizontal';
+  }
 }
 
 const styles = StyleSheet.create({
@@ -1439,8 +1385,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
+    scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 120,
+  },
   header: {
-    marginTop: 8,
+    flex: 1,
   },
   headerGradient: {
     paddingTop: Platform.OS === 'ios' ? 60 : (StatusBar.currentHeight || 0) + 20,
@@ -1448,6 +1400,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
+    marginTop: Platform.OS === 'android' ? -(StatusBar.currentHeight || 0) : 0,
   },
   headerContent: {
     flexDirection: 'row',
@@ -1635,7 +1588,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginBottom: 16,
+    marginBottom: 4,
   },
   sectionTitleRow: {
     flexDirection: 'row',
@@ -1698,6 +1651,207 @@ const styles = StyleSheet.create({
   budgetOverviewFill: {
     height: '100%',
     borderRadius: 3,
+  },
+  // Enhanced Budget Overview Styles
+  budgetOverviewSection: {
+    marginBottom: 24,
+    paddingHorizontal: 20,
+  },
+  budgetOverviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 4,
+  },
+  budgetOverviewTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  budgetOverviewTitleInfo: {
+    flex: 1,
+  },
+  budgetOverviewIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  budgetOverviewTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  budgetOverviewSubtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  budgetOverviewViewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 4,
+    minWidth: 90,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  budgetOverviewViewAllText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  budgetOverviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+    paddingHorizontal: 4,
+  },
+  budgetOverviewCard: {
+    width: '47%', // Slightly less than 48% to ensure proper spacing
+    minHeight: 160,
+    maxHeight: 180,
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  budgetOverviewCardGradient: {
+    padding: 16,
+    flex: 1, // Fill available card height
+    justifyContent: 'space-between', // Distribute content evenly
+  },
+  budgetOverviewCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  budgetOverviewCategoryIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  budgetOverviewCardCategory: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+  },
+  budgetOverviewProgressContainer: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  budgetOverviewProgressCircle: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  budgetOverviewProgressInnerCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  budgetOverviewProgressText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  budgetOverviewAmountSection: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  budgetOverviewSpentAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  budgetOverviewTotalAmount: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  budgetOverviewStatusBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 3,
+  },
+  budgetOverviewStatusText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: 'white',
+  },
+  budgetOverviewProgressBar: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  budgetOverviewProgressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  budgetOverviewEmptyState: {
+    alignItems: 'center',
+  },
+  budgetOverviewEmptyCard: {
+    width: '100%',
+    padding: 32,
+    borderRadius: 20,
+    alignItems: 'center',
+  },
+  budgetOverviewEmptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  budgetOverviewEmptySubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  budgetOverviewEmptyButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  budgetOverviewEmptyButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  budgetOverviewEmptyButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
   },
   budgetCard: {
     borderRadius: 16,
@@ -2212,13 +2366,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 11,
   },
   essentialActionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    paddingHorizontal: 0,
+    paddingHorizontal: -5,
   },
   essentialActionCard: {
     width: '48%',
@@ -2357,5 +2511,389 @@ const styles = StyleSheet.create({
   transactionAmountText: {
     fontSize: 18,
     fontWeight: '800',
+  },
+  
+  // Scanner History Styles
+  loadingState: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  scannerExpenseCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  scannerExpenseHeader: {
+    marginBottom: 12,
+  },
+  scannerExpenseMainInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  scannerExpenseTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
+  },
+  scannerIcon: {
+    marginRight: 8,
+  },
+  scannerMerchantName: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  scannerExpenseAmountSection: {
+    alignItems: 'flex-end',
+  },
+  scannerTotalAmount: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  scannerDate: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  scannerExpenseSecondaryInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  scannerCategoryBadge: {
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  scannerCategoryText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  scannerExpenseDetails: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(156, 163, 175, 0.3)',
+    paddingTop: 16,
+    marginTop: 8,
+  },
+  scannerDetailsSection: {
+    marginBottom: 16,
+  },
+  scannerDetailsSectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  scannerDetailsGrid: {
+    gap: 8,
+  },
+  scannerDetailItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  scannerDetailLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  scannerDetailValue: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  scannerItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(156, 163, 175, 0.2)',
+  },
+  scannerItemName: {
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
+    marginRight: 12,
+  },
+  scannerItemDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  scannerItemQuantity: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  scannerItemPrice: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  scannerItemsMore: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  scannerNotesText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontStyle: 'italic',
+  },
+  
+  // AI Insights Styles
+  loadingInsightsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  loadingInsightsText: {
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  refreshInsightsButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+  },
+  emptyInsightsState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  retryButton: {
+    marginTop: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  healthInsightCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  healthInsightHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  healthInsightTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  healthInsightTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  healthInsightScore: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 3,
+    borderColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  healthInsightScoreText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#ffffff',
+  },
+  healthInsightMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  healthInsightMetric: {
+    alignItems: 'center',
+  },
+  healthInsightMetricLabel: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginBottom: 4,
+  },
+  healthInsightMetricValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  trendInsightIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  trendInsightText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+  },
+  insightsSection: {
+    marginBottom: 20,
+  },
+  insightsSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  aiInsightCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  aiInsightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  aiInsightPriorityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  aiInsightTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  aiInsightPriorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  aiInsightPriorityText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  aiInsightDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  aiInsightSuggestion: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  suggestionsSection: {
+    marginBottom: 20,
+  },
+  suggestionsSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  aiSuggestionCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  aiSuggestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 8,
+  },
+  aiSuggestionTitleContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  aiSuggestionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+    marginRight: 12,
+  },
+  aiSuggestionPriorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  aiSuggestionPriorityText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  aiSuggestionDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  aiSuggestionAmount: {
+    alignItems: 'flex-end',
+  },
+  aiSuggestionAmountText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  categoryAnalysisSection: {
+    marginBottom: 20,
+  },
+  categoryAnalysisSectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  categoryAnalysisCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  categoryAnalysisHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  categoryAnalysisInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  categoryAnalysisName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  categoryAnalysisCount: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  categoryAnalysisAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  categoryAnalysisProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  categoryAnalysisProgressBar: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+  },
+  categoryAnalysisProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  categoryAnalysisPercentage: {
+    fontSize: 12,
+    fontWeight: '500',
+    minWidth: 40,
+    textAlign: 'right',
   },
 });

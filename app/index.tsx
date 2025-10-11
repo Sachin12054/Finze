@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { auth } from '../src/services/firebase';
+import { auth } from '../src/services/firebase/firebase';
 import '../src/utils/consoleSuppressions'; // Suppress warnings early
 
 export default function Index() {

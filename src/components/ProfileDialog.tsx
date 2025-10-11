@@ -4,16 +4,16 @@ import { signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { auth, db } from '../services/firebase';
+import { auth, db } from '../services/firebase/firebase';
 
 interface User {
   uid: string;

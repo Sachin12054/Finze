@@ -1,6 +1,6 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { storage } from './firebase';
+import { storage } from './firebase/firebase';
 
 export interface UploadProgress {
   progress: number;

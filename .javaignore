@@ -1,0 +1,28 @@
+# Ignore React Native node_modules Android directories
+node_modules/**/android/
+node_modules/**/.gradle/
+node_modules/**/build/
+node_modules/**/.settings/
+node_modules/**/gradle/
+node_modules/**/gradlew*
+
+# Ignore all React Native native modules
+node_modules/@react-native*/
+node_modules/react-native*/
+
+# Ignore build directories
+android/build/
+ios/build/
+build/
+dist/
+
+# Ignore native dependencies
+*.so
+*.a
+*.aar
+*.jar
+
+# Ignore Gradle wrapper
+gradle/
+gradlew*
+.gradle/

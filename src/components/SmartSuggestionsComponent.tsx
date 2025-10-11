@@ -2,331 +2,397 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Dimensions,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import AICategorizationService, { SmartSuggestion, SpendingInsight } from '../services/aiCategorizationService';
+
+const { width, height } = Dimensions.get('window');
 
 interface SmartSuggestionsProps {
   visible: boolean;
   onClose: () => void;
+  expenseData?: {
+    totalSpending: number;
+    transactionCount: number;
+    monthlyChange: number;
+    topCategories: Array<{
+      name: string;
+      amount: number;
+      percentage: number;
+      icon: keyof typeof Ionicons.glyphMap;
+      color: string;
+    }>;
+  };
+}
+
+interface InsightCard {
+  id: string;
+  title: string;
+  description: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  value?: string;
+}
+
+interface CategoryData {
+  name: string;
+  amount: number;
+  percentage: number;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
 }
 
 export const SmartSuggestionsComponent: React.FC<SmartSuggestionsProps> = ({
   visible,
   onClose,
+  expenseData,
 }) => {
-  const [suggestions, setSuggestions] = useState<SmartSuggestion[]>([]);
-  const [insights, setInsights] = useState<SpendingInsight[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'suggestions' | 'insights'>('suggestions');
+  const [activeTab, setActiveTab] = useState<'insights' | 'trends' | 'recommendations'>('insights');
+  const fadeAnim = new Animated.Value(0);
+  const slideAnim = new Animated.Value(height);
+
+  // Default data when no expense data is provided
+  const defaultData = {
+    totalSpending: 2450,
+    transactionCount: 87,
+    monthlyChange: -12,
+    topCategories: [
+      { name: 'Food & Dining', amount: 856, percentage: 35, icon: 'restaurant' as const, color: '#FF6B6B' },
+      { name: 'Transportation', amount: 612, percentage: 25, icon: 'car' as const, color: '#4ECDC4' },
+      { name: 'Entertainment', amount: 490, percentage: 20, icon: 'game-controller' as const, color: '#45B7D1' },
+      { name: 'Shopping', amount: 392, percentage: 16, icon: 'bag' as const, color: '#F39C12' },
+    ]
+  };
+
+  const data = expenseData || defaultData;
+  
+  // Calculate financial health score (0-100)
+  const calculateFinancialHealth = () => {
+    if (data.totalSpending === 0) return 0;
+    
+    let score = 70; // Base score
+    
+    // Adjust based on spending trend
+    if (data.monthlyChange < -20) score += 15; // Great reduction
+    else if (data.monthlyChange < -10) score += 10; // Good reduction
+    else if (data.monthlyChange < 0) score += 5; // Some reduction
+    else if (data.monthlyChange > 20) score -= 15; // High increase
+    else if (data.monthlyChange > 10) score -= 10; // Moderate increase
+    else if (data.monthlyChange > 0) score -= 5; // Small increase
+    
+    // Adjust based on transaction frequency (more transactions might indicate better tracking)
+    if (data.transactionCount > 50) score += 5;
+    else if (data.transactionCount < 10) score -= 10;
+    
+    return Math.max(0, Math.min(100, score));
+  };
+
+  const financialHealth = calculateFinancialHealth();
 
   useEffect(() => {
     if (visible) {
-      loadData();
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          tension: 65,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: height,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
   }, [visible]);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [suggestionsData, insightsData] = await Promise.all([
-        AICategorizationService.generateSmartSuggestions(),
-        AICategorizationService.generateSpendingInsights(),
-      ]);
-      setSuggestions(suggestionsData);
-      setInsights(insightsData);
-    } catch (error) {
-      console.error('Error loading smart suggestions:', error);
-      Alert.alert('Error', 'Failed to load smart suggestions');
-    } finally {
-      setLoading(false);
+  const mockInsights: InsightCard[] = [
+    {
+      id: '1',
+      title: 'Spending Pattern',
+      description: 'Your food expenses increased by 15% this month',
+      icon: 'restaurant',
+      color: '#FF6B6B',
+      value: '+15%'
+    },
+    {
+      id: '2',
+      title: 'Budget Optimization',
+      description: 'You could save $120 by reducing entertainment costs',
+      icon: 'bulb',
+      color: '#4ECDC4',
+      value: '$120'
+    },
+    {
+      id: '3',
+      title: 'Category Analysis',
+      description: 'Transportation is your highest expense category',
+      icon: 'car',
+      color: '#45B7D1',
+      value: '32%'
+    },
+    {
+      id: '4',
+      title: 'Trend Forecast',
+      description: 'Based on current trends, monthly expenses will increase',
+      icon: 'trending-up',
+      color: '#F39C12',
+      value: '+8%'
     }
-  };
+  ];
 
-  const handleSuggestionAction = (suggestion: SmartSuggestion) => {
-    switch (suggestion.type) {
-      case 'budget_alert':
-        Alert.alert(
-          'Budget Alert',
-          `Would you like to review your ${suggestion.data?.budget?.category} budget?`,
-          [
-            { text: 'Later', style: 'cancel' },
-            { 
-              text: 'Review Budget', 
-              onPress: () => {
-                // Navigate to budget editing screen
-                console.log('Navigate to budget review');
-              }
-            }
-          ]
-        );
-        break;
-      case 'goal_recommendation':
-        Alert.alert(
-          'Create Goal',
-          `Would you like to create an emergency fund goal for ₹${suggestion.data?.suggestedAmount?.toFixed(2)}?`,
-          [
-            { text: 'Not Now', style: 'cancel' },
-            { 
-              text: 'Create Goal', 
-              onPress: () => {
-                // Navigate to goal creation
-                console.log('Navigate to goal creation');
-              }
-            }
-          ]
-        );
-        break;
-      case 'saving_opportunity':
-        Alert.alert(
-          'Saving Opportunity',
-          suggestion.description,
-          [
-            { text: 'Dismiss', style: 'cancel' },
-            { 
-              text: 'View Details', 
-              onPress: () => {
-                // Navigate to detailed view
-                console.log('Navigate to saving details');
-              }
-            }
-          ]
-        );
-        break;
-      case 'spending_pattern':
-        Alert.alert(
-          'Spending Pattern',
-          suggestion.description,
-          [
-            { text: 'Got It', style: 'cancel' },
-            { 
-              text: 'View Transactions', 
-              onPress: () => {
-                // Navigate to transactions filtered by category
-                console.log('Navigate to category transactions');
-              }
-            }
-          ]
-        );
-        break;
-    }
-  };
-
-  const getSuggestionIcon = (type: SmartSuggestion['type']) => {
-    switch (type) {
-      case 'budget_alert':
-        return 'warning';
-      case 'saving_opportunity':
-        return 'savings';
-      case 'spending_pattern':
-        return 'trending-up';
-      case 'goal_recommendation':
-        return 'flag';
-      default:
-        return 'bulb';
-    }
-  };
-
-  const getPriorityColor = (priority: SmartSuggestion['priority']) => {
-    switch (priority) {
-      case 'high':
-        return '#EF4444';
-      case 'medium':
-        return '#F59E0B';
-      case 'low':
-        return '#10B981';
-      default:
-        return '#6B7280';
-    }
-  };
-
-  const getInsightIcon = (trend: SpendingInsight['trend']) => {
-    switch (trend) {
-      case 'increasing':
-        return 'trending-up';
-      case 'decreasing':
-        return 'trending-down';
-      default:
-        return 'remove';
-    }
-  };
-
-  const getInsightColor = (impact: SpendingInsight['impact']) => {
-    switch (impact) {
-      case 'positive':
-        return '#10B981';
-      case 'negative':
-        return '#EF4444';
-      default:
-        return '#6B7280';
-    }
-  };
-
-  const renderSuggestion = (suggestion: SmartSuggestion, index: number) => (
-    <TouchableOpacity
-      key={index}
-      style={styles.suggestionCard}
-      onPress={() => suggestion.actionable && handleSuggestionAction(suggestion)}
-      activeOpacity={suggestion.actionable ? 0.7 : 1}
-    >
-      <View style={styles.suggestionHeader}>
-        <View style={styles.suggestionIconContainer}>
-          <Ionicons 
-            name={getSuggestionIcon(suggestion.type) as any} 
-            size={20} 
-            color={getPriorityColor(suggestion.priority)} 
-          />
-        </View>
-        <View style={styles.suggestionContent}>
-          <Text style={styles.suggestionTitle}>{suggestion.title}</Text>
-          <Text style={styles.suggestionDescription}>{suggestion.description}</Text>
-        </View>
-        <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(suggestion.priority) }]}>
-          <Text style={styles.priorityText}>{suggestion.priority.toUpperCase()}</Text>
-        </View>
+  const renderCategoryCard = (category: CategoryData, index: number) => (
+    <View key={category.name} style={[styles.categoryCard, index % 2 === 0 ? styles.categoryCardLeft : styles.categoryCardRight]}>
+      <View style={[styles.categoryIconContainer, { backgroundColor: category.color + '20' }]}>
+        <Ionicons name={category.icon} size={24} color={category.color} />
       </View>
-      
-      {suggestion.actionable && (
-        <View style={styles.actionContainer}>
-          <Ionicons name="chevron-forward" size={16} color="#6B7280" />
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-
-  const renderInsight = (insight: SpendingInsight, index: number) => (
-    <View key={index} style={styles.insightCard}>
-      <View style={styles.insightHeader}>
-        <View style={[styles.insightIconContainer, { backgroundColor: getInsightColor(insight.impact) + '20' }]}>
-          <Ionicons 
-            name={getInsightIcon(insight.trend) as any} 
-            size={18} 
-            color={getInsightColor(insight.impact)} 
-          />
-        </View>
-        <View style={styles.insightContent}>
-          <Text style={styles.insightTitle}>{insight.insight}</Text>
-          <Text style={styles.insightCategory}>{insight.category}</Text>
-        </View>
-      </View>
-      <Text style={styles.insightSuggestion}>{insight.suggestion}</Text>
+      <Text style={styles.categoryName}>{category.name}</Text>
+      <Text style={styles.categoryAmount}>${category.amount.toLocaleString()}</Text>
+      <Text style={styles.categoryPercentage}>{category.percentage}% of total</Text>
     </View>
   );
 
-  if (!visible) return null;
+  const renderFinancialHealthCard = () => {
+    const getHealthColor = (score: number) => {
+      if (score >= 80) return '#10B981'; // Green
+      if (score >= 60) return '#F59E0B'; // Yellow
+      if (score >= 40) return '#F97316'; // Orange
+      return '#EF4444'; // Red
+    };
+
+    const getHealthLabel = (score: number) => {
+      if (score >= 80) return 'Excellent';
+      if (score >= 60) return 'Good';
+      if (score >= 40) return 'Fair';
+      return 'Needs Attention';
+    };
+
+    const healthColor = getHealthColor(financialHealth);
+    const healthLabel = getHealthLabel(financialHealth);
+
+    return (
+      <View style={styles.healthCard}>
+        <View style={styles.healthHeader}>
+          <Text style={styles.healthTitle}>Financial Health</Text>
+          <View style={[styles.healthBadge, { backgroundColor: healthColor }]}>
+            <Text style={styles.healthBadgeText}>{healthLabel}</Text>
+          </View>
+        </View>
+        <View style={styles.healthScoreContainer}>
+          <View style={styles.healthScoreCircle}>
+            <Text style={[styles.healthScore, { color: healthColor }]}>{financialHealth}</Text>
+            <Text style={styles.healthScoreLabel}>Score</Text>
+          </View>
+          <View style={styles.healthMetrics}>
+            <View style={styles.healthMetric}>
+              <Text style={styles.healthMetricValue}>${data.totalSpending.toLocaleString()}</Text>
+              <Text style={styles.healthMetricLabel}>Total Spending</Text>
+            </View>
+            <View style={styles.healthMetric}>
+              <Text style={[styles.healthMetricValue, { color: data.monthlyChange < 0 ? '#10B981' : '#EF4444' }]}>
+                {data.monthlyChange > 0 ? '+' : ''}{data.monthlyChange}%
+              </Text>
+              <Text style={styles.healthMetricLabel}>vs Last Month</Text>
+            </View>
+            <View style={styles.healthMetric}>
+              <Text style={styles.healthMetricValue}>{data.transactionCount}</Text>
+              <Text style={styles.healthMetricLabel}>Transactions</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderInsightCard = (insight: InsightCard) => (
+    <Animated.View key={insight.id} style={[styles.insightCard, { backgroundColor: 'white' }]}>
+      <View style={styles.cardHeader}>
+        <View style={[styles.iconContainer, { backgroundColor: insight.color + '20' }]}>
+          <Ionicons name={insight.icon} size={24} color={insight.color} />
+        </View>
+        {insight.value && (
+          <View style={[styles.valueContainer, { backgroundColor: insight.color }]}>
+            <Text style={styles.valueText}>{insight.value}</Text>
+          </View>
+        )}
+      </View>
+      <Text style={styles.cardTitle}>{insight.title}</Text>
+      <Text style={styles.cardDescription}>{insight.description}</Text>
+    </Animated.View>
+  );
+
+  const renderTabButton = (tab: 'insights' | 'trends' | 'recommendations', title: string, icon: keyof typeof Ionicons.glyphMap) => (
+    <TouchableOpacity
+      style={[styles.tabButton, activeTab === tab && styles.activeTabButton]}
+      onPress={() => setActiveTab(tab)}
+    >
+      <Ionicons 
+        name={icon} 
+        size={18} 
+        color={activeTab === tab ? '#4F46E5' : '#6B7280'} 
+      />
+      <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+        {title}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Animated.View style={styles.loadingDot} />
+          <Text style={styles.loadingText}>Analyzing your financial data...</Text>
+        </View>
+      );
+    }
+
+    if (activeTab === 'insights') {
+      return (
+        <View style={styles.contentContainer}>
+          {/* Financial Health Card */}
+          {renderFinancialHealthCard()}
+          
+          {/* Top Spending Categories Grid */}
+          <Text style={styles.sectionTitle}>Top Spending Categories</Text>
+          <View style={styles.categoriesGrid}>
+            {data.topCategories.map((category, index) => renderCategoryCard(category, index))}
+          </View>
+          
+          {/* AI Insights */}
+          <Text style={styles.sectionTitle}>AI-Powered Insights</Text>
+          {mockInsights.map(renderInsightCard)}
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="analytics" size={64} color="#E5E7EB" />
+        <Text style={styles.emptyStateTitle}>
+          {activeTab === 'trends' ? 'Spending Trends' : 'Smart Recommendations'}
+        </Text>
+        <Text style={styles.emptyStateText}>
+          {activeTab === 'trends' 
+            ? 'Track your spending patterns over time with detailed analytics'
+            : 'Get personalized recommendations to optimize your finances'
+          }
+        </Text>
+        <TouchableOpacity style={styles.ctaButton}>
+          <Text style={styles.ctaButtonText}>Add More Expenses</Text>
+          <Ionicons name="arrow-forward" size={16} color="white" />
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={styles.container}>
-        {/* Header */}
-        <LinearGradient colors={['#6366F1', '#8B5CF6']} style={styles.header}>
-          <View style={styles.headerContent}>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="white" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Smart Insights</Text>
-            <View style={styles.headerRight} />
-          </View>
-        </LinearGradient>
-
-        {/* Tab Navigation */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'suggestions' && styles.activeTab]}
-            onPress={() => setActiveTab('suggestions')}
-          >
-            <Ionicons 
-              name="bulb" 
-              size={20} 
-              color={activeTab === 'suggestions' ? '#6366F1' : '#6B7280'} 
-            />
-            <Text style={[styles.tabText, activeTab === 'suggestions' && styles.activeTabText]}>
-              Suggestions ({suggestions.length})
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'insights' && styles.activeTab]}
-            onPress={() => setActiveTab('insights')}
-          >
-            <Ionicons 
-              name="analytics" 
-              size={20} 
-              color={activeTab === 'insights' ? '#6366F1' : '#6B7280'} 
-            />
-            <Text style={[styles.tabText, activeTab === 'insights' && styles.activeTabText]}>
-              Insights ({insights.length})
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Content */}
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Analyzing your financial data...</Text>
+    <Modal visible={visible} animationType="none" transparent onRequestClose={onClose}>
+      <StatusBar barStyle="light-content" backgroundColor="rgba(0,0,0,0.5)" />
+      <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+        <Animated.View style={[styles.modalContainer, { transform: [{ translateY: slideAnim }] }]}>
+          <LinearGradient colors={['#667eea', '#764ba2']} style={styles.container}>
+            <View style={styles.header}>
+              <View style={styles.headerLeft}>
+                <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                  <Ionicons name="close" size={24} color="white" />
+                </TouchableOpacity>
+                <View style={styles.headerTitleContainer}>
+                  <Text style={styles.headerTitle}>AI Financial Insights</Text>
+                  <Text style={styles.headerSubtitle}>Powered by Machine Learning</Text>
+                </View>
+              </View>
+              <View style={styles.headerRight}>
+                <TouchableOpacity style={styles.refreshButton}>
+                  <Ionicons name="refresh" size={20} color="white" />
+                </TouchableOpacity>
+              </View>
             </View>
-          ) : (
-            <>
-              {activeTab === 'suggestions' ? (
-                <View style={styles.suggestionsContainer}>
-                  {suggestions.length === 0 ? (
-                    <View style={styles.emptyState}>
-                      <Ionicons name="checkmark-circle" size={48} color="#10B981" />
-                      <Text style={styles.emptyStateTitle}>All Good!</Text>
-                      <Text style={styles.emptyStateText}>
-                        No urgent suggestions at the moment. Keep up the great work!
-                      </Text>
-                    </View>
-                  ) : (
-                    suggestions.map(renderSuggestion)
-                  )}
-                </View>
-              ) : (
-                <View style={styles.insightsContainer}>
-                  {insights.length === 0 ? (
-                    <View style={styles.emptyState}>
-                      <Ionicons name="analytics" size={48} color="#6B7280" />
-                      <Text style={styles.emptyStateTitle}>Building Insights</Text>
-                      <Text style={styles.emptyStateText}>
-                        Add more transactions to get personalized spending insights.
-                      </Text>
-                    </View>
-                  ) : (
-                    insights.map(renderInsight)
-                  )}
-                </View>
-              )}
-            </>
-          )}
-        </ScrollView>
-      </View>
+            
+            <View style={styles.tabContainer}>
+              {renderTabButton('insights', 'Insights', 'analytics')}
+              {renderTabButton('trends', 'Trends', 'trending-up')}
+              {renderTabButton('recommendations', 'Tips', 'bulb')}
+            </View>
+
+            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+              {renderContent()}
+            </ScrollView>
+          </LinearGradient>
+        </Animated.View>
+      </Animated.View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  // Modal and Overlay
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    height: height * 0.9,
+    width: width,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    overflow: 'hidden',
   },
+  
+  // Header Styles
   header: {
     paddingTop: 50,
     paddingBottom: 20,
-    paddingHorizontal: 20,
-  },
-  headerContent: {
+    paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   closeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  refreshButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -334,180 +400,307 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  headerTitleContainer: {
+    flex: 1,
+  },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
     color: 'white',
+    letterSpacing: 0.5,
   },
-  headerRight: {
-    width: 40,
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+    fontWeight: '500',
   },
+  
+  // Tab Navigation
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: 'white',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginHorizontal: 20,
+    borderRadius: 15,
     padding: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginBottom: 20,
   },
-  tab: {
+  tabButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
-    gap: 8,
-  },
-  activeTab: {
-    backgroundColor: '#EBF4FF',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#6B7280',
-  },
-  activeTabText: {
-    color: '#6366F1',
-    fontWeight: '600',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#6B7280',
-    marginTop: 12,
-  },
-  suggestionsContainer: {
-    gap: 12,
-  },
-  suggestionCard: {
-    backgroundColor: 'white',
     borderRadius: 12,
-    padding: 16,
+  },
+  activeTabButton: {
+    backgroundColor: 'white',
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  activeTabText: {
+    color: '#4F46E5',
+  },
+  
+  // Content Area
+  content: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    paddingHorizontal: 20,
+  },
+  contentContainer: {
+    paddingTop: 24,
+  },
+  
+  // Section Headers
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 16,
+    letterSpacing: 0.3,
+  },
+  
+  // Financial Health Styles
+  healthCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
     elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-  suggestionHeader: {
+  healthHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  suggestionIconContainer: {
+  healthTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  healthBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  healthBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'white',
+  },
+  healthScoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  healthScoreCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 20,
+  },
+  healthScore: {
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  healthScoreLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  healthMetrics: {
+    flex: 1,
+  },
+  healthMetric: {
+    marginBottom: 12,
+  },
+  healthMetricValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  healthMetricLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  
+  // Categories Grid Styles
+  categoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 24,
+  },
+  categoryCard: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    width: (width - 52) / 2, // Account for padding and gap
+  },
+  categoryCardLeft: {
+    marginRight: 6,
+  },
+  categoryCardRight: {
+    marginLeft: 6,
+  },
+  categoryIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginBottom: 12,
   },
-  suggestionContent: {
-    flex: 1,
-  },
-  suggestionTitle: {
-    fontSize: 16,
+  categoryName: {
+    fontSize: 14,
     fontWeight: '600',
     color: '#1F2937',
     marginBottom: 4,
   },
-  suggestionDescription: {
-    fontSize: 14,
-    color: '#6B7280',
-    lineHeight: 20,
-  },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 8,
-  },
-  priorityText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: 'white',
-  },
-  actionContainer: {
-    alignItems: 'flex-end',
-    marginTop: 8,
-  },
-  insightsContainer: {
-    gap: 12,
-  },
-  insightCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  insightHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  insightIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  insightContent: {
-    flex: 1,
-  },
-  insightTitle: {
+  categoryAmount: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1F2937',
     marginBottom: 2,
   },
-  insightCategory: {
+  categoryPercentage: {
     fontSize: 12,
-    color: '#6366F1',
+    color: '#6B7280',
     fontWeight: '500',
   },
-  insightSuggestion: {
+  
+  // Insight Cards
+  insightCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  valueContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  valueText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'white',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 6,
+  },
+  cardDescription: {
     fontSize: 14,
     color: '#6B7280',
     lineHeight: 20,
   },
+  
+  // Loading State
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#4F46E5',
+    marginBottom: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  
+  // Empty State
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 60,
+    paddingHorizontal: 32,
   },
   emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#1F2937',
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 24,
+    marginBottom: 12,
+    textAlign: 'center',
   },
   emptyStateText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  
+  // CTA Button
+  ctaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 25,
+    elevation: 3,
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  ctaButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+    marginRight: 8,
   },
 });
 
