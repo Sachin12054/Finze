@@ -1131,6 +1131,7 @@ function InsightsTab({
       </View>
       
       {/* Financial Health Card */}
+      {aiInsights.financial_health && (
       <LinearGradient
         colors={[colors.primary, '#60a5fa']}
         style={styles.healthInsightCard}
@@ -1142,7 +1143,7 @@ function InsightsTab({
           </View>
           <View style={styles.healthInsightScore}>
             <Text style={styles.healthInsightScoreText}>
-              {aiInsights.financial_health.health_score}
+              {aiInsights.financial_health.health_score || 0}
             </Text>
           </View>
         </View>
@@ -1151,38 +1152,39 @@ function InsightsTab({
           <View style={styles.healthInsightMetric}>
             <Text style={styles.healthInsightMetricLabel}>Total Spending</Text>
             <Text style={styles.healthInsightMetricValue}>
-              ₹{aiInsights.financial_health.total_spending.toLocaleString()}
+              ₹{(aiInsights.financial_health.total_spending || 0).toLocaleString()}
             </Text>
           </View>
           <View style={styles.healthInsightMetric}>
             <Text style={styles.healthInsightMetricLabel}>Avg Transaction</Text>
             <Text style={styles.healthInsightMetricValue}>
-              ₹{aiInsights.financial_health.average_transaction.toLocaleString()}
+              ₹{(aiInsights.financial_health.average_transaction || 0).toLocaleString()}
             </Text>
           </View>
           <View style={styles.healthInsightMetric}>
             <Text style={styles.healthInsightMetricLabel}>Transactions</Text>
             <Text style={styles.healthInsightMetricValue}>
-              {aiInsights.financial_health.transaction_count}
+              {aiInsights.financial_health.transaction_count || 0}
             </Text>
           </View>
         </View>
 
         <View style={styles.trendInsightIndicator}>
           <Ionicons
-            name={aiInsights.financial_health.spending_trend === 'increasing' ? 'trending-up' : 
-                 aiInsights.financial_health.spending_trend === 'decreasing' ? 'trending-down' : 'remove'}
+            name={(aiInsights.financial_health.spending_trend || 'stable') === 'increasing' ? 'trending-up' : 
+                 (aiInsights.financial_health.spending_trend || 'stable') === 'decreasing' ? 'trending-down' : 'remove'}
             size={20}
             color="#ffffff"
           />
           <Text style={styles.trendInsightText}>
-            {aiInsights.financial_health.spending_change_percent > 0 ? '+' : ''}{aiInsights.financial_health.spending_change_percent}% from last period
+            {(aiInsights.financial_health.spending_change_percent || 0) > 0 ? '+' : ''}{aiInsights.financial_health.spending_change_percent || 0}% from last period
           </Text>
         </View>
       </LinearGradient>
+      )}
 
       {/* Spending Insights */}
-      {aiInsights.spending_insights.length > 0 && (
+      {aiInsights.spending_insights && aiInsights.spending_insights.length > 0 && (
         <View style={styles.insightsSection}>
           <Text style={[styles.insightsSectionTitle, { color: colors.text }]}>
             💡 Spending Insights
@@ -1221,7 +1223,7 @@ function InsightsTab({
       )}
 
       {/* Smart Suggestions */}
-      {aiInsights.smart_suggestions.length > 0 && (
+      {aiInsights.smart_suggestions && aiInsights.smart_suggestions.length > 0 && (
         <View style={styles.suggestionsSection}>
           <Text style={[styles.suggestionsSectionTitle, { color: colors.text }]}>
             🎯 Smart Suggestions
@@ -1277,7 +1279,7 @@ function InsightsTab({
               {suggestion.suggested_amount && (
                 <View style={styles.aiSuggestionAmount}>
                   <Text style={[styles.aiSuggestionAmountText, { color: colors.primary }]}>
-                    Suggested: ₹{suggestion.suggested_amount.toLocaleString()}
+                    Suggested: ₹{(suggestion.suggested_amount || 0).toLocaleString()}
                   </Text>
                 </View>
               )}
@@ -1287,7 +1289,7 @@ function InsightsTab({
       )}
 
       {/* Category Analysis */}
-      {Object.keys(aiInsights.category_analysis).length > 0 && (
+      {aiInsights.category_analysis && Object.keys(aiInsights.category_analysis).length > 0 && (
         <View style={styles.categoryAnalysisSection}>
           <Text style={[styles.categoryAnalysisSectionTitle, { color: colors.text }]}>
             📊 Category Analysis
@@ -1308,11 +1310,11 @@ function InsightsTab({
                       {category}
                     </Text>
                     <Text style={[styles.categoryAnalysisCount, { color: colors.textSecondary }]}>
-                      {data.count} transactions
+                      {data.count || 0} transactions
                     </Text>
                   </View>
                   <Text style={[styles.categoryAnalysisAmount, { color: colors.text }]}>
-                    ₹{data.total.toLocaleString()}
+                    ₹{(data.total || 0).toLocaleString()}
                   </Text>
                 </View>
                 <View style={styles.categoryAnalysisProgress}>
@@ -1320,12 +1322,12 @@ function InsightsTab({
                     <View
                       style={[
                         styles.categoryAnalysisProgressFill,
-                        { backgroundColor: colors.primary, width: `${Math.min(data.percentage, 100)}%` }
+                        { backgroundColor: colors.primary, width: `${Math.min(data.percentage || 0, 100)}%` }
                       ]}
                     />
                   </View>
                   <Text style={[styles.categoryAnalysisPercentage, { color: colors.textSecondary }]}>
-                    {data.percentage}%
+                    {data.percentage || 0}%
                   </Text>
                 </View>
               </View>
@@ -1334,9 +1336,9 @@ function InsightsTab({
       )}
 
       {/* Empty state if no insights */}
-      {aiInsights.spending_insights.length === 0 && 
-       aiInsights.smart_suggestions.length === 0 && 
-       Object.keys(aiInsights.category_analysis).length === 0 && (
+      {(!aiInsights.spending_insights || aiInsights.spending_insights.length === 0) && 
+       (!aiInsights.smart_suggestions || aiInsights.smart_suggestions.length === 0) && 
+       (!aiInsights.category_analysis || Object.keys(aiInsights.category_analysis).length === 0) && (
         <View style={styles.emptyInsightsState}>
           <Ionicons name="analytics" size={48} color={colors.textMuted} />
           <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>

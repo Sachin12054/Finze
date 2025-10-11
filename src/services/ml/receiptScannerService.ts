@@ -95,7 +95,7 @@ class ReceiptScannerService {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), BACKEND_CONFIG.HEALTH_CHECK_TIMEOUT);
       
-      const response = await fetch(`${this.baseUrl}/health`, {
+      const response = await fetch(`${this.baseUrl}/api/health`, {
         method: 'GET',
         signal: controller.signal,
       });
@@ -188,7 +188,7 @@ class ReceiptScannerService {
       }, this.timeout);
 
       console.log('🚀 Uploading receipt to backend...');
-      console.log(`📍 Upload URL: ${this.baseUrl}/upload-receipt`);
+      console.log(`📍 Upload URL: ${this.baseUrl}/api/upload-receipt`);
       
       // Debug FormData contents
       console.log('🔍 FormData contents:');
@@ -202,7 +202,7 @@ class ReceiptScannerService {
         }
       }
       
-      const response = await fetch(`${this.baseUrl}/upload-receipt`, {
+      const response = await fetch(`${this.baseUrl}/api/upload-receipt`, {
         method: 'POST',
         body: formData,
         headers: {
