@@ -256,8 +256,35 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
   const renderFinancialHealthOverview = () => {
     if (!insightsData) return null;
 
-    const { healthScore, summary } = insightsData;
-    const healthColor = getHealthScoreColor(healthScore.overall);
+    // Calculate health score based on spending patterns
+    const calculateHealthScore = () => {
+      const avgDaily = insightsData.timeBasedAnalysis.daily.avgPerDay;
+      const totalSpent = insightsData.totalSpent;
+      const transactionCount = insightsData.totalTransactions;
+      
+      let score = 85; // Base score
+      
+      // Adjust based on spending patterns
+      if (avgDaily > 2000) score -= 15;
+      else if (avgDaily > 1000) score -= 10;
+      else if (avgDaily > 500) score -= 5;
+      
+      if (transactionCount > 20) score += 5; // Good tracking habits
+      if (Object.keys(insightsData.categoryBreakdown).length > 3) score += 5; // Good categorization
+      
+      return Math.max(Math.min(score, 100), 30); // Clamp between 30-100
+    };
+
+    const healthScore = calculateHealthScore();
+    const getGrade = (score: number) => {
+      if (score >= 90) return 'A+';
+      if (score >= 80) return 'A';
+      if (score >= 70) return 'B';
+      if (score >= 60) return 'C';
+      return 'D';
+    };
+
+    const healthColor = getHealthScoreColor(healthScore);
 
     return (
       <Animated.View entering={FadeInUp.delay(200)}>
@@ -271,8 +298,8 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
               <Text style={styles.healthTitle}>Financial Health</Text>
             </View>
             <View style={[styles.healthScore, { borderColor: '#ffffff' }]}>
-              <Text style={styles.healthScoreText}>{healthScore.overall}</Text>
-              <Text style={styles.healthGrade}>{healthScore.grade}</Text>
+              <Text style={styles.healthScoreText}>{healthScore}</Text>
+              <Text style={styles.healthGrade}>{getGrade(healthScore)}</Text>
             </View>
           </View>
           
@@ -280,32 +307,32 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
             <View style={styles.healthMetric}>
               <Text style={styles.healthMetricLabel}>Total Expenses</Text>
               <Text style={styles.healthMetricValue}>
-                ₹{summary.totalExpenses.toLocaleString()}
+                ₹{insightsData.totalSpent.toLocaleString()}
               </Text>
             </View>
             <View style={styles.healthMetric}>
-              <Text style={styles.healthMetricLabel}>Total Budget</Text>
+              <Text style={styles.healthMetricLabel}>Transactions</Text>
               <Text style={styles.healthMetricValue}>
-                ₹{summary.totalBudget.toLocaleString()}
+                {insightsData.totalTransactions}
               </Text>
             </View>
             <View style={styles.healthMetric}>
-              <Text style={styles.healthMetricLabel}>Savings Rate</Text>
+              <Text style={styles.healthMetricLabel}>Avg/Transaction</Text>
               <Text style={styles.healthMetricValue}>
-                {summary.savingsRate}%
+                ₹{Math.round(insightsData.avgTransactionAmount)}
               </Text>
             </View>
           </View>
 
           <View style={styles.trendIndicator}>
             <Ionicons
-              name={summary.financialMomentum === 'improving' ? 'trending-up' : 
-                   summary.financialMomentum === 'declining' ? 'trending-down' : 'remove'}
+              name={insightsData.spendingInsights.spendingPattern.includes('High') ? 'trending-up' : 
+                   insightsData.spendingInsights.spendingPattern.includes('small') ? 'trending-down' : 'remove'}
               size={20}
               color="#ffffff"
             />
             <Text style={styles.trendText}>
-              Financial momentum: {summary.financialMomentum}
+              Pattern: {insightsData.spendingInsights.spendingPattern}
             </Text>
           </View>
         </LinearGradient>
@@ -315,28 +342,28 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
 
   // Render key insights summary
   const renderKeyInsights = () => {
-    if (!insightsData || insightsData.insights.length === 0) return null;
+    if (!insightsData || insightsData.recommendations.length === 0) return null;
 
-    const topInsights = insightsData.insights.slice(0, 3);
+    const topRecommendations = insightsData.recommendations.slice(0, 3);
 
     return (
       <Animated.View entering={FadeInUp.delay(300)}>
         <View style={[styles.categoryCard, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Key AI Insights</Text>
-          {topInsights.map((insight, index) => (
-            <View key={insight.id} style={styles.insightSummaryItem}>
-              <View style={[styles.priorityDot, { backgroundColor: getPriorityColor(insight.priority) }]} />
+          {topRecommendations.map((recommendation: string, index: number) => (
+            <View key={index} style={styles.insightSummaryItem}>
+              <View style={[styles.priorityDot, { backgroundColor: index === 0 ? colors.error : index === 1 ? colors.warning : colors.success }]} />
               <View style={styles.insightSummaryContent}>
                 <Text style={[styles.insightSummaryTitle, { color: colors.text }]} numberOfLines={1}>
-                  {insight.title}
+                  AI Recommendation #{index + 1}
                 </Text>
                 <Text style={[styles.insightSummaryDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-                  {insight.description}
+                  {recommendation}
                 </Text>
               </View>
-              <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(insight.priority) + '20' }]}>
-                <Text style={[styles.priorityBadgeText, { color: getPriorityColor(insight.priority) }]}>
-                  {insight.priority.toUpperCase()}
+              <View style={[styles.priorityBadge, { backgroundColor: (index === 0 ? colors.error : index === 1 ? colors.warning : colors.success) + '20' }]}>
+                <Text style={[styles.priorityBadgeText, { color: index === 0 ? colors.error : index === 1 ? colors.warning : colors.success }]}>
+                  {index === 0 ? 'HIGH' : index === 1 ? 'MEDIUM' : 'LOW'}
                 </Text>
               </View>
             </View>
@@ -348,36 +375,41 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
 
   // Render top spending categories
   const renderTopCategories = () => {
-    if (!insightsData || insightsData.categoryInsights.length === 0) return null;
+    if (!insightsData || Object.keys(insightsData.categoryBreakdown).length === 0) return null;
 
-    const topCategories = insightsData.categoryInsights.slice(0, 4);
+    const categoryEntries = Object.entries(insightsData.categoryBreakdown)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 4);
 
     return (
       <Animated.View entering={FadeInUp.delay(400)}>
         <View style={[styles.categoryCard, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Top Spending Categories</Text>
           <View style={styles.categoriesGrid}>
-            {topCategories.map((category, index) => (
-              <View key={category.category} style={[styles.categoryOverviewItem, { backgroundColor: colors.surfaceHover }]}>
-                <Ionicons
-                  name={getCategoryIcon(category.category)}
-                  size={20}
-                  color={colors.primary}
-                />
-                <Text style={[styles.categoryName, { color: colors.text }]} numberOfLines={1}>
-                  {category.category}
-                </Text>
-                <Text style={[styles.categoryAmount, { color: colors.textSecondary }]}>
-                  ₹{category.totalSpent.toLocaleString()}
-                </Text>
-                <Text style={[styles.categoryPercentage, { color: colors.textMuted }]}>
-                  {category.percentageOfTotal.toFixed(1)}% of total
-                </Text>
-                <Text style={[styles.categoryTransactions, { color: colors.textMuted }]}>
-                  {category.transactions} transactions
-                </Text>
-              </View>
-            ))}
+            {categoryEntries.map(([categoryName, amount], index: number) => {
+              const percentage = (amount / insightsData.totalSpent) * 100;
+              return (
+                <View key={categoryName} style={[styles.categoryOverviewItem, { backgroundColor: colors.surfaceHover }]}>
+                  <Ionicons
+                    name={getCategoryIcon(categoryName)}
+                    size={20}
+                    color={colors.primary}
+                  />
+                  <Text style={[styles.categoryName, { color: colors.text }]} numberOfLines={1}>
+                    {categoryName}
+                  </Text>
+                  <Text style={[styles.categoryAmount, { color: colors.textSecondary }]}>
+                    ₹{amount.toLocaleString()}
+                  </Text>
+                  <Text style={[styles.categoryPercentage, { color: colors.textMuted }]}>
+                    {percentage.toFixed(1)}% of total
+                  </Text>
+                  <Text style={[styles.categoryTransactions, { color: colors.textMuted }]}>
+                    {Math.round(percentage)}% share
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         </View>
       </Animated.View>
@@ -386,277 +418,115 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
 
   // Render category analysis tab
   const renderCategoryAnalysis = () => {
-    if (!insightsData?.categoryInsights) return null;
+    if (!insightsData || Object.keys(insightsData.categoryBreakdown).length === 0) return null;
+
+    const categoryEntries = Object.entries(insightsData.categoryBreakdown)
+      .sort(([,a], [,b]) => b - a);
 
     return (
       <View style={styles.tabContent}>
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Category Performance</Text>
-        {insightsData.categoryInsights.map((category, index) => (
-          <Animated.View key={category.category} entering={FadeInUp.delay(100 + index * 50)}>
-            <View style={[styles.categoryCard, { backgroundColor: colors.surface }]}>
-              <View style={styles.categoryHeader}>
-                <Ionicons
-                  name={getCategoryIcon(category.category)}
-                  size={24}
-                  color={colors.primary}
-                />
-                <View style={styles.categoryInfo}>
-                  <Text style={[styles.categoryName, { color: colors.text }]}>{category.category}</Text>
-                  <Text style={[styles.categoryCount, { color: colors.textSecondary }]}>
-                    {category.transactions} transactions • {category.comparison.replace('_', ' ')}
-                  </Text>
-                </View>
-                <View style={styles.categoryAmountContainer}>
-                  <Text style={[styles.categoryAmount, { color: colors.text }]}>
-                    ₹{category.totalSpent.toLocaleString()}
-                  </Text>
-                  <Text style={[styles.categoryPercentage, { color: colors.textSecondary }]}>
-                    {category.percentageOfTotal.toFixed(1)}%
-                  </Text>
-                </View>
-              </View>
-              
-              <View style={styles.categoryProgress}>
-                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { 
-                        backgroundColor: category.comparison === 'over_budget' ? colors.error : colors.primary, 
-                        width: `${Math.min(category.percentageOfTotal, 100)}%` 
-                      }
-                    ]}
+        {categoryEntries.map(([categoryName, amount], index: number) => {
+          const percentage = (amount / insightsData.totalSpent) * 100;
+          return (
+            <Animated.View key={categoryName} entering={FadeInUp.delay(100 + index * 50)}>
+              <View style={[styles.categoryCard, { backgroundColor: colors.surface }]}>
+                <View style={styles.categoryHeader}>
+                  <Ionicons
+                    name={getCategoryIcon(categoryName)}
+                    size={24}
+                    color={colors.primary}
                   />
+                  <View style={styles.categoryInfo}>
+                    <Text style={[styles.categoryName, { color: colors.text }]}>{categoryName}</Text>
+                    <Text style={[styles.categoryCount, { color: colors.textSecondary }]}>
+                      {percentage.toFixed(1)}% of total spending
+                    </Text>
+                  </View>
+                  <View style={styles.categoryAmountContainer}>
+                    <Text style={[styles.categoryAmount, { color: colors.text }]}>
+                      ₹{amount.toLocaleString()}
+                    </Text>
+                    <Text style={[styles.categoryPercentage, { color: colors.textSecondary }]}>
+                      {percentage.toFixed(1)}%
+                    </Text>
+                  </View>
                 </View>
-                <Text style={[styles.trendIndicatorText, { color: colors.textMuted }]}>
-                  Trend: {category.trend}
-                </Text>
-              </View>
+                
+                <View style={styles.categoryProgress}>
+                  <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { 
+                          backgroundColor: percentage > 40 ? colors.error : percentage > 25 ? colors.warning : colors.primary, 
+                          width: `${Math.min(percentage, 100)}%` 
+                        }
+                      ]}
+                    />
+                  </View>
+                  <Text style={[styles.trendIndicatorText, { color: colors.textMuted }]}>
+                    Category share
+                  </Text>
+                </View>
 
-              {category.recommendations.length > 0 && (
                 <View style={styles.categoryRecommendations}>
-                  <Text style={[styles.recommendationsTitle, { color: colors.text }]}>Recommendations:</Text>
-                  {category.recommendations.slice(0, 2).map((rec, idx) => (
+                  <Text style={[styles.recommendationsTitle, { color: colors.text }]}>AI Tips:</Text>
+                  {insightsData.budgetSuggestions.slice(0, 2).map((suggestion: string, idx: number) => (
                     <Text key={idx} style={[styles.recommendationText, { color: colors.textSecondary }]}>
-                      • {rec}
+                      • {suggestion}
                     </Text>
                   ))}
                 </View>
-              )}
-            </View>
-          </Animated.View>
-        ))}
+              </View>
+            </Animated.View>
+          );
+        })}
       </View>
     );
   };
 
   // Render budget performance tab
   const renderBudgetPerformance = () => {
-    if (!insightsData?.budgetPerformance || insightsData.budgetPerformance.length === 0) {
-      return (
-        <View style={styles.emptyState}>
-          <Ionicons name="wallet" size={48} color={colors.textMuted} />
-          <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
-            No budget data available
-          </Text>
-          <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
-            Set up budgets to track your spending performance
-          </Text>
-        </View>
-      );
-    }
-
+    // Budget performance data is not available in current AIInsights structure
     return (
-      <View style={styles.tabContent}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Budget Performance</Text>
-        {insightsData.budgetPerformance.map((budget, index) => (
-          <Animated.View key={budget.budgetName} entering={FadeInUp.delay(100 + index * 50)}>
-            <View style={[styles.budgetCard, { backgroundColor: colors.surface }]}>
-              <View style={styles.budgetHeader}>
-                <View style={styles.budgetTitleContainer}>
-                  <Text style={[styles.budgetTitle, { color: colors.text }]}>{budget.budgetName}</Text>
-                  <Text style={[styles.budgetDaysRemaining, { color: colors.textSecondary }]}>
-                    {budget.daysRemaining} days remaining
-                  </Text>
-                </View>
-                <View style={[styles.budgetStatusBadge, { 
-                  backgroundColor: budget.status === 'exceeded' ? colors.error + '20' : 
-                                  budget.status === 'warning' ? colors.warning + '20' : colors.success + '20' 
-                }]}>
-                  <Text style={[styles.budgetStatusText, { 
-                    color: budget.status === 'exceeded' ? colors.error : 
-                           budget.status === 'warning' ? colors.warning : colors.success 
-                  }]}>
-                    {budget.status.toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.budgetAmounts}>
-                <View style={styles.budgetAmountItem}>
-                  <Text style={[styles.budgetAmountLabel, { color: colors.textMuted }]}>Allocated</Text>
-                  <Text style={[styles.budgetAmountValue, { color: colors.text }]}>
-                    ₹{budget.allocated.toLocaleString()}
-                  </Text>
-                </View>
-                <View style={styles.budgetAmountItem}>
-                  <Text style={[styles.budgetAmountLabel, { color: colors.textMuted }]}>Spent</Text>
-                  <Text style={[styles.budgetAmountValue, { color: colors.text }]}>
-                    ₹{budget.spent.toLocaleString()}
-                  </Text>
-                </View>
-                <View style={styles.budgetAmountItem}>
-                  <Text style={[styles.budgetAmountLabel, { color: colors.textMuted }]}>Remaining</Text>
-                  <Text style={[styles.budgetAmountValue, { 
-                    color: budget.remaining >= 0 ? colors.success : colors.error 
-                  }]}>
-                    ₹{budget.remaining.toLocaleString()}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.categoryProgress}>
-                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { 
-                        backgroundColor: budget.percentageUsed > 100 ? colors.error : 
-                                        budget.percentageUsed > 80 ? colors.warning : colors.success,
-                        width: `${Math.min(budget.percentageUsed, 100)}%` 
-                      }
-                    ]}
-                  />
-                </View>
-                <Text style={[styles.budgetPercentageText, { color: colors.textSecondary }]}>
-                  {budget.percentageUsed.toFixed(1)}% used
-                </Text>
-              </View>
-
-              {budget.recommendations.length > 0 && (
-                <View style={styles.budgetRecommendations}>
-                  {budget.recommendations.slice(0, 2).map((rec, idx) => (
-                    <Text key={idx} style={[styles.recommendationText, { color: colors.textSecondary }]}>
-                      • {rec}
-                    </Text>
-                  ))}
-                </View>
-              )}
-            </View>
-          </Animated.View>
-        ))}
+      <View style={styles.emptyState}>
+        <Ionicons name="wallet" size={48} color={colors.textMuted} />
+        <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
+          Budget Tracking Coming Soon
+        </Text>
+        <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
+          Budget performance analysis will be available in a future update. For now, use category insights to monitor your spending.
+        </Text>
       </View>
     );
   };
 
   // Render goals progress tab
   const renderGoalsProgress = () => {
-    if (!insightsData?.goalProgress || insightsData.goalProgress.length === 0) {
-      return (
-        <View style={styles.emptyState}>
-          <Ionicons name="flag" size={48} color={colors.textMuted} />
-          <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
-            No financial goals set
-          </Text>
-          <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
-            Set financial goals to track your progress and get personalized advice
-          </Text>
-        </View>
-      );
-    }
-
+    // Goals progress data is not available in current AIInsights structure
     return (
-      <View style={styles.tabContent}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Goals Progress</Text>
-        {insightsData.goalProgress.map((goal, index) => (
-          <Animated.View key={goal.goalName} entering={FadeInUp.delay(100 + index * 50)}>
-            <View style={[styles.goalCard, { backgroundColor: colors.surface }]}>
-              <View style={styles.goalHeader}>
-                <View style={styles.goalInfo}>
-                  <Text style={[styles.goalTitle, { color: colors.text }]}>{goal.goalName}</Text>
-                  <Text style={[styles.goalTimeline, { color: colors.textSecondary }]}>
-                    {goal.monthsRemaining} months remaining
-                  </Text>
-                </View>
-                <View style={[styles.goalStatusBadge, { 
-                  backgroundColor: goal.onTrack ? colors.success + '20' : colors.warning + '20'
-                }]}>
-                  <Text style={[styles.goalStatusText, { 
-                    color: goal.onTrack ? colors.success : colors.warning 
-                  }]}>
-                    {goal.onTrack ? 'ON TRACK' : 'BEHIND'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.goalAmounts}>
-                <View style={styles.goalAmountItem}>
-                  <Text style={[styles.goalAmountLabel, { color: colors.textMuted }]}>Target</Text>
-                  <Text style={[styles.goalAmountValue, { color: colors.text }]}>
-                    ₹{goal.targetAmount.toLocaleString()}
-                  </Text>
-                </View>
-                <View style={styles.goalAmountItem}>
-                  <Text style={[styles.goalAmountLabel, { color: colors.textMuted }]}>Saved</Text>
-                  <Text style={[styles.goalAmountValue, { color: colors.text }]}>
-                    ₹{goal.savedAmount.toLocaleString()}
-                  </Text>
-                </View>
-                <View style={styles.goalAmountItem}>
-                  <Text style={[styles.goalAmountLabel, { color: colors.textMuted }]}>Monthly Need</Text>
-                  <Text style={[styles.goalAmountValue, { color: colors.text }]}>
-                    ₹{goal.monthlyTarget.toLocaleString()}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.categoryProgress}>
-                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { 
-                        backgroundColor: goal.onTrack ? colors.success : colors.warning,
-                        width: `${Math.min(goal.percentageComplete, 100)}%` 
-                      }
-                    ]}
-                  />
-                </View>
-                <Text style={[styles.goalPercentageText, { color: colors.textSecondary }]}>
-                  {goal.percentageComplete.toFixed(1)}% complete
-                </Text>
-              </View>
-
-              {goal.adjustedTimeline && (
-                <View style={styles.goalAdjustedTimeline}>
-                  <Ionicons name="time" size={16} color={colors.warning} />
-                  <Text style={[styles.adjustedTimelineText, { color: colors.warning }]}>
-                    Adjusted timeline: {goal.adjustedTimeline}
-                  </Text>
-                </View>
-              )}
-
-              {goal.recommendations.length > 0 && (
-                <View style={styles.goalRecommendations}>
-                  {goal.recommendations.slice(0, 2).map((rec, idx) => (
-                    <Text key={idx} style={[styles.recommendationText, { color: colors.textSecondary }]}>
-                      • {rec}
-                    </Text>
-                  ))}
-                </View>
-              )}
-            </View>
-          </Animated.View>
-        ))}
+      <View style={styles.emptyState}>
+        <Ionicons name="flag" size={48} color={colors.textMuted} />
+        <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
+          Financial Goals Coming Soon
+        </Text>
+        <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
+          Goal tracking and progress analysis will be available in a future update. Continue tracking expenses to prepare for when this feature launches.
+        </Text>
       </View>
     );
   };
 
   // Render AI recommendations tab
   const renderRecommendations = () => {
-    if (!insightsData?.recommendations) return null;
+    if (!insightsData?.recommendations || insightsData.recommendations.length === 0) return null;
 
-    const { immediate, shortTerm, longTerm } = insightsData.recommendations;
+    // Divide recommendations into categories for better organization
+    const allRecommendations = insightsData.recommendations;
+    const immediate = allRecommendations.slice(0, Math.ceil(allRecommendations.length / 3));
+    const shortTerm = allRecommendations.slice(Math.ceil(allRecommendations.length / 3), Math.ceil(allRecommendations.length * 2 / 3));
+    const longTerm = allRecommendations.slice(Math.ceil(allRecommendations.length * 2 / 3));
 
     return (
       <View style={styles.tabContent}>
@@ -672,7 +542,7 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
                   Immediate Actions
                 </Text>
               </View>
-              {immediate.map((rec, index) => (
+              {immediate.map((rec: string, index: number) => (
                 <View key={index} style={styles.recommendationItem}>
                   <View style={[styles.priorityDot, { backgroundColor: colors.error }]} />
                   <Text style={[styles.recommendationItemText, { color: colors.textSecondary }]}>
@@ -694,7 +564,7 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
                   Short-term (1-3 months)
                 </Text>
               </View>
-              {shortTerm.map((rec, index) => (
+              {shortTerm.map((rec: string, index: number) => (
                 <View key={index} style={styles.recommendationItem}>
                   <View style={[styles.priorityDot, { backgroundColor: colors.warning }]} />
                   <Text style={[styles.recommendationItemText, { color: colors.textSecondary }]}>
@@ -716,11 +586,33 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
                   Long-term (6+ months)
                 </Text>
               </View>
-              {longTerm.map((rec, index) => (
+              {longTerm.map((rec: string, index: number) => (
                 <View key={index} style={styles.recommendationItem}>
                   <View style={[styles.priorityDot, { backgroundColor: colors.success }]} />
                   <Text style={[styles.recommendationItemText, { color: colors.textSecondary }]}>
                     {rec}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        )}
+
+        {/* Budget Suggestions */}
+        {insightsData.budgetSuggestions.length > 0 && (
+          <Animated.View entering={FadeInUp.delay(400)}>
+            <View style={[styles.recommendationSection, { backgroundColor: colors.surface }]}>
+              <View style={styles.recommendationSectionHeader}>
+                <Ionicons name="wallet" size={20} color={colors.primary} />
+                <Text style={[styles.recommendationSectionTitle, { color: colors.text }]}>
+                  Budget Suggestions
+                </Text>
+              </View>
+              {insightsData.budgetSuggestions.map((suggestion: string, index: number) => (
+                <View key={index} style={styles.recommendationItem}>
+                  <View style={[styles.priorityDot, { backgroundColor: colors.primary }]} />
+                  <Text style={[styles.recommendationItemText, { color: colors.textSecondary }]}>
+                    {suggestion}
                   </Text>
                 </View>
               ))}
