@@ -46,11 +46,11 @@ import { useToast } from '../../src/hooks/useToast';
 
 // Import components
 import AddExpenseDialog from '../../src/components/AddExpenseDialog';
-import { AIInsightsScreen } from '../../src/components/AIInsightsScreen';
 import { CalendarComponent } from '../../src/components/CalendarComponent';
 import { FirebaseStatusBanner } from '../../src/components/FirebaseStatusBanner';
 import { ProfileDialog } from '../../src/components/ProfileDialog';
 import ScannerDialog from '../../src/components/ScannerDialog';
+import { SimpleAIInsightsScreen } from '../../src/components/SimpleAIInsightsScreen';
 import { SmartSuggestionsComponent } from '../../src/components/SmartSuggestionsComponent';
 import TransactionHistory from '../../src/components/TransactionHistory';
 
@@ -830,7 +830,7 @@ export default function HomeScreen() {
         onClose={() => setShowSmartSuggestions(false)}
       />
 
-      <AIInsightsScreen
+      <SimpleAIInsightsScreen
         isVisible={showAIInsights}
         onClose={() => setShowAIInsights(false)}
       />

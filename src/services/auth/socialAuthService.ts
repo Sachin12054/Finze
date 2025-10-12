@@ -1,4 +1,5 @@
 import { FacebookAuthProvider, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { Platform } from 'react-native';
 import { EnhancedFirebaseService } from '../firebase/enhancedFirebaseService';
 import { auth } from '../firebase/firebase';
 
@@ -7,19 +8,22 @@ let GoogleSignin: any;
 let AccessToken: any;
 let LoginManager: any;
 
-try {
-  const GoogleSignInModule = require('@react-native-google-signin/google-signin');
-  GoogleSignin = GoogleSignInModule.GoogleSignin;
-} catch (error) {
-  console.log('Google Sign-In not available in this environment');
-}
+// Only import native modules on native platforms
+if (Platform.OS !== 'web') {
+  try {
+    const GoogleSignInModule = require('@react-native-google-signin/google-signin');
+    GoogleSignin = GoogleSignInModule.GoogleSignin;
+  } catch (error) {
+    console.log('Google Sign-In not available in this environment');
+  }
 
-try {
-  const FacebookModule = require('react-native-fbsdk-next');
-  AccessToken = FacebookModule.AccessToken;
-  LoginManager = FacebookModule.LoginManager;
-} catch (error) {
-  console.log('Facebook SDK not available in this environment');
+  try {
+    const FacebookModule = require('react-native-fbsdk-next');
+    AccessToken = FacebookModule.AccessToken;
+    LoginManager = FacebookModule.LoginManager;
+  } catch (error) {
+    console.log('Facebook SDK not available in this environment');
+  }
 }
 
 export interface SocialAuthResult {
@@ -36,6 +40,11 @@ export class SocialAuthService {
   
   // Configure Google Sign-In
   static configureGoogleSignIn() {
+    if (Platform.OS === 'web') {
+      console.log('⚠️ Google Sign-In: Web platform detected. Native sign-in not available.');
+      return;
+    }
+
     if (!GoogleSignin) {
       console.log('Google Sign-In not available - using fallback');
       return;
@@ -54,6 +63,10 @@ export class SocialAuthService {
 
   // Google Sign-In
   static async signInWithGoogle(): Promise<SocialAuthResult> {
+    if (Platform.OS === 'web') {
+      throw new Error('WEB_PLATFORM_NOT_SUPPORTED');
+    }
+
     if (!GoogleSignin) {
       throw new Error('EXPO_GO_LIMITATION');
     }
@@ -109,6 +122,10 @@ export class SocialAuthService {
 
   // Facebook Sign-In
   static async signInWithFacebook(): Promise<SocialAuthResult> {
+    if (Platform.OS === 'web') {
+      throw new Error('WEB_PLATFORM_NOT_SUPPORTED');
+    }
+
     if (!LoginManager || !AccessToken) {
       throw new Error('EXPO_GO_LIMITATION');
     }

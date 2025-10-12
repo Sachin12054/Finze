@@ -1,18 +1,18 @@
 // Enhanced Firebase Service for complete app structure
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  setDoc,
-  updateDoc,
-  where
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    limit,
+    onSnapshot,
+    orderBy,
+    query,
+    setDoc,
+    updateDoc,
+    where
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
@@ -348,27 +348,37 @@ export class EnhancedFirebaseService {
     
     unsubscribeManual = onSnapshot(manualQuery, (snapshot) => {
       console.log('Manual expenses snapshot received:', snapshot.docs.length, 'documents');
-      manualTransactions = snapshot.docs.map(doc => {
-        const data = doc.data();
-        console.log('Processing manual expense:', doc.id, data);
-        return {
-          id: doc.id,
-          userId: data.user_id,
-          title: data.title,
-          amount: data.amount,
-          category: data.category,
-          type: data.type,
-          source: data.source || 'Manual',
-          description: data.description,
-          date: data.date,
-          paymentMethod: data.payment_method,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-        };
-      }) as Transaction[];
+      manualTransactions = snapshot.docs
+        .filter(doc => {
+          const data = doc.data();
+          // ONLY include expenses, exclude income transactions
+          const isExpense = data.type === 'expense' || !data.type; // Default to expense if type is missing
+          if (!isExpense) {
+            console.log('Filtering out income transaction:', data.title, data.amount, data.type);
+          }
+          return isExpense;
+        })
+        .map(doc => {
+          const data = doc.data();
+          console.log('Processing manual expense:', doc.id, data);
+          return {
+            id: doc.id,
+            userId: data.user_id,
+            title: data.title,
+            amount: data.amount,
+            category: data.category,
+            type: data.type,
+            source: data.source || 'Manual',
+            description: data.description,
+            date: data.date,
+            paymentMethod: data.payment_method,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at,
+          };
+        }) as Transaction[];
       
       if (this.shouldLog()) {
-        console.log('Total manual transactions:', manualTransactions.length);
+        console.log('Total manual transactions (expenses only):', manualTransactions.length);
       }
       combineAndCallback();
     });

@@ -430,6 +430,110 @@ export const EnhancedAIInsightsComponent: React.FC<EnhancedAIInsightsProps> = ({
           </View>
         </View>
 
+        {/* Time-Based Analysis */}
+        <View style={styles.sectionContainer}>
+          <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#FFFFFF' : '#1F2937' }]}>
+            📅 Time-Based Spending Analysis
+          </Text>
+          
+          {/* Time Period Stats */}
+          <View style={styles.timeAnalysisGrid}>
+            <View style={[styles.timeAnalysisCard, { backgroundColor: isDarkTheme ? '#374151' : '#FFFFFF' }]}>
+              <Text style={[styles.timeAnalysisLabel, { color: isDarkTheme ? '#9CA3AF' : '#6B7280' }]}>
+                Today
+              </Text>
+              <Text style={[styles.timeAnalysisAmount, { color: isDarkTheme ? '#FFFFFF' : '#1F2937' }]}>
+                ₹{insights.time_based_analysis.daily.amount.toLocaleString()}
+              </Text>
+              <Text style={[styles.timeAnalysisSubtext, { color: isDarkTheme ? '#9CA3AF' : '#6B7280' }]}>
+                {insights.time_based_analysis.daily.transactions} transactions
+              </Text>
+            </View>
+            
+            <View style={[styles.timeAnalysisCard, { backgroundColor: isDarkTheme ? '#374151' : '#FFFFFF' }]}>
+              <Text style={[styles.timeAnalysisLabel, { color: isDarkTheme ? '#9CA3AF' : '#6B7280' }]}>
+                This Week
+              </Text>
+              <Text style={[styles.timeAnalysisAmount, { color: isDarkTheme ? '#FFFFFF' : '#1F2937' }]}>
+                ₹{insights.time_based_analysis.weekly.amount.toLocaleString()}
+              </Text>
+              <Text style={[styles.timeAnalysisSubtext, { color: isDarkTheme ? '#9CA3AF' : '#6B7280' }]}>
+                {insights.time_based_analysis.weekly.transactions} transactions
+              </Text>
+            </View>
+            
+            <View style={[styles.timeAnalysisCard, { backgroundColor: isDarkTheme ? '#374151' : '#FFFFFF' }]}>
+              <Text style={[styles.timeAnalysisLabel, { color: isDarkTheme ? '#9CA3AF' : '#6B7280' }]}>
+                This Month
+              </Text>
+              <Text style={[styles.timeAnalysisAmount, { color: isDarkTheme ? '#FFFFFF' : '#1F2937' }]}>
+                ₹{insights.time_based_analysis.monthly.amount.toLocaleString()}
+              </Text>
+              <Text style={[styles.timeAnalysisSubtext, { color: isDarkTheme ? '#9CA3AF' : '#6B7280' }]}>
+                {insights.time_based_analysis.monthly.transactions} transactions
+              </Text>
+            </View>
+            
+            <View style={[styles.timeAnalysisCard, { backgroundColor: isDarkTheme ? '#374151' : '#FFFFFF' }]}>
+              <Text style={[styles.timeAnalysisLabel, { color: isDarkTheme ? '#9CA3AF' : '#6B7280' }]}>
+                This Year
+              </Text>
+              <Text style={[styles.timeAnalysisAmount, { color: isDarkTheme ? '#FFFFFF' : '#1F2937' }]}>
+                ₹{insights.time_based_analysis.yearly.amount.toLocaleString()}
+              </Text>
+              <Text style={[styles.timeAnalysisSubtext, { color: isDarkTheme ? '#9CA3AF' : '#6B7280' }]}>
+                {insights.time_based_analysis.yearly.transactions} transactions
+              </Text>
+            </View>
+          </View>
+          
+          {/* Spending Patterns */}
+          <View style={[styles.insightCard, { backgroundColor: isDarkTheme ? '#374151' : '#FFFFFF' }]}>
+            <View style={styles.insightHeader}>
+              <Ionicons name="analytics-outline" size={20} color="#6366F1" />
+              <Text style={[styles.insightTitle, { color: isDarkTheme ? '#FFFFFF' : '#1F2937' }]}>
+                Spending Patterns
+              </Text>
+            </View>
+            <Text style={[styles.insightDescription, { color: isDarkTheme ? '#D1D5DB' : '#4B5563' }]}>
+              Top spending day: {insights.spending_insights.topSpendingDay}
+            </Text>
+            <Text style={[styles.insightDescription, { color: isDarkTheme ? '#D1D5DB' : '#4B5563' }]}>
+              Most expensive: {insights.spending_insights.mostExpensiveTransaction.title} (₹{insights.spending_insights.mostExpensiveTransaction.amount})
+            </Text>
+            <Text style={[styles.insightDescription, { color: isDarkTheme ? '#D1D5DB' : '#4B5563' }]}>
+              Frequent category: {insights.spending_insights.frequentCategory}
+            </Text>
+            <Text style={[styles.insightDescription, { color: isDarkTheme ? '#D1D5DB' : '#4B5563' }]}>
+              Pattern: {insights.spending_insights.spendingPattern.replace(/_/g, ' ')}
+            </Text>
+          </View>
+          
+          {/* Savings Opportunity */}
+          {insights.spending_insights.savingsOpportunity.potential > 0 && (
+            <View style={[styles.insightCard, { backgroundColor: isDarkTheme ? '#374151' : '#FFFFFF' }]}>
+              <View style={styles.insightHeader}>
+                <Ionicons name="leaf-outline" size={20} color="#10B981" />
+                <Text style={[styles.insightTitle, { color: isDarkTheme ? '#FFFFFF' : '#1F2937' }]}>
+                  Savings Opportunity
+                </Text>
+              </View>
+              <Text style={[styles.insightDescription, { color: isDarkTheme ? '#D1D5DB' : '#4B5563' }]}>
+                Category: {insights.spending_insights.savingsOpportunity.category}
+              </Text>
+              <Text style={[styles.insightDescription, { color: isDarkTheme ? '#D1D5DB' : '#4B5563' }]}>
+                Potential: ₹{insights.spending_insights.savingsOpportunity.potential.toLocaleString()}
+              </Text>
+              <Text style={[styles.insightDescription, { color: isDarkTheme ? '#D1D5DB' : '#4B5563' }]}>
+                Strategy: {insights.spending_insights.savingsOpportunity.strategy}
+              </Text>
+              <Text style={[styles.insightDescription, { color: '#10B981' }]}>
+                Difficulty: {insights.spending_insights.savingsOpportunity.difficulty}
+              </Text>
+            </View>
+          )}
+        </View>
+
         {/* Top Insights */}
         <View style={styles.sectionContainer}>
           <Text style={[styles.sectionTitle, { color: isDarkTheme ? '#FFFFFF' : '#1F2937' }]}>
@@ -1002,6 +1106,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
     lineHeight: 20,
+  },
+  timeAnalysisGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 8,
+  },
+  timeAnalysisCard: {
+    width: '48%',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    marginBottom: 8,
+  },
+  timeAnalysisLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  timeAnalysisAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 2,
+    textAlign: 'center',
+  },
+  timeAnalysisSubtext: {
+    fontSize: 10,
+    textAlign: 'center',
   },
 });
 

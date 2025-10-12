@@ -1,174 +1,193 @@
-import * as ImageManipulator from 'expo-image-manipulator';
-import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 import { storage } from './firebase/firebase';
 
 export interface UploadProgress {
   progress: number;
-  status: 'uploading' | 'processing' | 'complete' | 'error';
-  message?: string;
+  message: string;
+  isComplete: boolean;
 }
 
-// Compress and resize image for optimal storage
-export const processImage = async (uri: string): Promise<string> => {
-  try {
-    const manipulatedImage = await ImageManipulator.manipulateAsync(
-      uri,
-      [
-        { resize: { width: 800, height: 800 } }, // Resize to max 800x800
-      ],
-      {
-        compress: 0.7, // 70% quality
-        format: ImageManipulator.SaveFormat.JPEG,
-      }
-    );
-    return manipulatedImage.uri;
-  } catch (error) {
-    console.error('Error processing image:', error);
-    throw new Error('Failed to process image');
-  }
-};
+/**
+ * Generate a placeholder avatar URL using a service like Dicebear or Gravatar
+ */
+export function generatePlaceholderAvatar(userId: string, displayName: string): string {
+  // Clean the display name for URL usage
+  const cleanName = encodeURIComponent(displayName.trim() || 'User');
+  
+  // Use Dicebear API for consistent, beautiful avatars
+  // Options: avataaars, big-smile, bottts, identicon, initials, lorelei, micah, miniavs, open-peeps, personas, pixel-art
+  const style = 'initials'; // Using initials style for professional look
+  
+  // Generate consistent seed based on userId
+  const seed = userId || Math.random().toString(36).substring(7);
+  
+  // Additional parameters for customization
+  const params = new URLSearchParams({
+    seed: seed,
+    size: '200',
+    backgroundColor: '3B82F6,EF4444,10B981,F59E0B,8B5CF6', // Nice color palette
+    textColor: 'ffffff',
+    fontSize: '36',
+    bold: 'true'
+  });
+  
+  return `https://api.dicebear.com/7.x/${style}/svg?${params.toString()}`;
+}
 
-// Upload image to Firebase Storage with retry mechanism
-export const uploadProfileImage = async (
+/**
+ * Upload profile image to Firebase Storage
+ */
+export async function uploadProfileImage(
+  imageUri: string, 
   userId: string,
-  imageUri: string,
-  onProgress?: (progress: UploadProgress) => void,
-  maxRetries: number = 2
-): Promise<string> => {
-  let retryCount = 0;
-  
-  while (retryCount <= maxRetries) {
-    try {
-      console.log(`Upload attempt ${retryCount + 1}/${maxRetries + 1} for user:`, userId);
-      console.log('Image URI:', imageUri);
-      console.log('Storage instance:', storage);
-      
-      // Process image first
-      onProgress?.({ progress: 10, status: 'processing', message: 'Processing image...' });
-      const processedUri = await processImage(imageUri);
-      console.log('Image processed successfully:', processedUri);
-      
-      onProgress?.({ progress: 30, status: 'uploading', message: 'Uploading image...' });
-      
-      // Convert image to blob
-      const response = await fetch(processedUri);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
-      }
-      const blob = await response.blob();
-      console.log('Image converted to blob, size:', blob.size, 'type:', blob.type);
-      
-      onProgress?.({ progress: 50, status: 'uploading', message: 'Uploading to cloud...' });
-      
-      // Create reference with timestamp to avoid conflicts
-      const timestamp = Date.now();
-      const filename = `profile_${userId}_${timestamp}.jpg`;
-      const imageRef = ref(storage, `profile-pictures/${filename}`);
-      console.log('Storage reference created:', imageRef.fullPath);
-      
-      onProgress?.({ progress: 70, status: 'uploading', message: 'Finalizing upload...' });
-      
-      // Upload the blob with metadata
-      const metadata = {
-        contentType: 'image/jpeg',
-        customMetadata: {
-          'uploaded-by': userId,
-          'upload-timestamp': timestamp.toString()
-        }
-      };
-      
-      const uploadResult = await uploadBytes(imageRef, blob, metadata);
-      console.log('Upload successful:', uploadResult);
-      
-      onProgress?.({ progress: 90, status: 'uploading', message: 'Getting download URL...' });
-      
-      // Get the download URL
-      const downloadURL = await getDownloadURL(imageRef);
-      console.log('Download URL obtained:', downloadURL);
-      
-      onProgress?.({ progress: 100, status: 'complete', message: 'Upload complete!' });
-      
-      return downloadURL;
-    } catch (error: any) {
-      console.error(`Upload attempt ${retryCount + 1} failed:`, {
-        error: error,
-        message: error.message,
-        code: error.code,
-        serverResponse: error.serverResponse,
-        customData: error.customData
-      });
-      
-      retryCount++;
-      
-      if (retryCount > maxRetries) {
-        onProgress?.({ progress: 0, status: 'error', message: 'Upload failed' });
-        
-        // Provide more specific error messages
-        if (error.code === 'storage/unauthorized') {
-          throw new Error('Permission denied. Please check storage rules or contact support.');
-        } else if (error.code === 'storage/quota-exceeded') {
-          throw new Error('Storage quota exceeded. Please try again later.');
-        } else if (error.code === 'storage/unauthenticated') {
-          throw new Error('User not authenticated. Please log in again.');
-        } else if (error.code === 'storage/retry-limit-exceeded') {
-          throw new Error('Upload failed after multiple retries. Please check your connection.');
-        } else if (error.code === 'storage/invalid-format') {
-          throw new Error('Invalid image format. Please use JPG or PNG.');
-        } else if (error.code === 'storage/unknown') {
-          throw new Error('Storage service temporarily unavailable. Please check your Firebase project configuration and try again.');
-        } else {
-          throw new Error(`Upload failed: ${error.message || 'Unknown error'}`);
-        }
-      } else {
-        console.log(`Retrying upload in 1 second... (${retryCount}/${maxRetries})`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        onProgress?.({ progress: 5, status: 'uploading', message: `Retrying... (${retryCount}/${maxRetries})` });
-      }
-    }
-  }
-  
-  throw new Error('Maximum retry attempts exceeded');
-};
-
-// Delete old profile image
-export const deleteProfileImage = async (imageUrl: string): Promise<void> => {
+  onProgress?: (progress: UploadProgress) => void
+): Promise<string> {
   try {
-    if (imageUrl && imageUrl.includes('firebase')) {
-      // Extract the path from the URL
-      const pathStart = imageUrl.indexOf('/o/') + 3;
-      const pathEnd = imageUrl.indexOf('?');
-      const encodedPath = imageUrl.substring(pathStart, pathEnd);
-      const path = decodeURIComponent(encodedPath);
-      
-      const imageRef = ref(storage, path);
-      await deleteObject(imageRef);
-    }
-  } catch (error) {
-    console.error('Error deleting image:', error);
-    // Don't throw error here as it's not critical
+    // Create a unique filename
+    const timestamp = Date.now();
+    const filename = `profile_images/${userId}/${timestamp}.jpg`;
+    const storageRef = ref(storage, filename);
+    
+    // Convert URI to blob for upload
+    const response = await fetch(imageUri);
+    const blob = await response.blob();
+    
+    // Start upload with progress tracking
+    const uploadTask = uploadBytesResumable(storageRef, blob);
+    
+    return new Promise((resolve, reject) => {
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          // Progress tracking
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          const progressData: UploadProgress = {
+            progress,
+            message: `Uploading... ${Math.round(progress)}%`,
+            isComplete: false
+          };
+          
+          if (onProgress) {
+            onProgress(progressData);
+          }
+          
+          console.log(`Upload progress: ${progress}%`);
+        },
+        (error) => {
+          // Handle upload errors
+          console.error('Upload error:', error);
+          reject(new Error(`Upload failed: ${error.message}`));
+        },
+        async () => {
+          // Upload completed successfully
+          try {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            
+            if (onProgress) {
+              onProgress({
+                progress: 100,
+                message: 'Upload complete!',
+                isComplete: true
+              });
+            }
+            
+            console.log('✅ Image uploaded successfully:', downloadURL);
+            resolve(downloadURL);
+          } catch (error: any) {
+            reject(new Error(`Failed to get download URL: ${error.message}`));
+          }
+        }
+      );
+    });
+  } catch (error: any) {
+    console.error('❌ Upload error:', error);
+    throw new Error(`Failed to upload image: ${error.message}`);
   }
-};
+}
 
-// Generate a placeholder avatar URL with more customization
-export const generatePlaceholderAvatar = (userId: string, name?: string): string => {
-  const initials = name
-    ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : 'U';
-  
-  // Create a more diverse set of background colors based on userId
-  const colors = [
-    '4facfe', '00f2fe', '667eea', '764ba2', 'ff9a9e', 'fecfef',
-    'ffecd2', 'fcb69f', 'a8edea', 'd299c2', 'fad0c4', 'ffd1ff',
-    'c2e9fb', '8fd3f4', 'fdbb2d', '22c1c3', 'f093fb', '53a0fd',
-    'cd9cf2', 'de6262', '74b9ff', '6c5ce7', 'fab1a0', 'ff7675'
-  ];
-  
-  // Use userId to generate consistent color selection
-  const colorIndex = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
-  const backgroundColor = colors[colorIndex];
-  
-  // Determine text color for better contrast
-  const textColor = 'ffffff';
-  
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=${backgroundColor}&color=${textColor}&size=400&bold=true&font-size=0.6&rounded=true`;
+/**
+ * Delete profile image from Firebase Storage
+ */
+export async function deleteProfileImage(imageUrl: string): Promise<void> {
+  try {
+    // Check if it's a Firebase Storage URL
+    if (!imageUrl.includes('firebase') && !imageUrl.includes('googleapis.com')) {
+      console.log('Not a Firebase Storage URL, skipping deletion');
+      return;
+    }
+    
+    // Extract the path from the URL
+    const url = new URL(imageUrl);
+    const path = decodeURIComponent(url.pathname.split('/o/')[1]?.split('?')[0] || '');
+    
+    if (!path) {
+      throw new Error('Could not extract file path from URL');
+    }
+    
+    // Create reference and delete
+    const fileRef = ref(storage, path);
+    await deleteObject(fileRef);
+    
+    console.log('✅ Profile image deleted successfully');
+  } catch (error: any) {
+    console.error('❌ Error deleting profile image:', error);
+    // Don't throw error for deletion failures to avoid blocking user operations
+    console.warn('Continuing despite deletion error...');
+  }
+}
+
+/**
+ * Compress image before upload (optional helper)
+ */
+export function compressImage(uri: string, quality: number = 0.8): Promise<string> {
+  return new Promise((resolve) => {
+    // For now, just return the original URI
+    // In a production app, you might want to use a library like expo-image-manipulator
+    resolve(uri);
+  });
+}
+
+/**
+ * Validate image file
+ */
+export function validateImage(uri: string, maxSizeMB: number = 5): { valid: boolean; error?: string } {
+  try {
+    // Basic validation - in a real app you might want to check file size, type, etc.
+    if (!uri) {
+      return { valid: false, error: 'No image selected' };
+    }
+    
+    if (!uri.startsWith('file://') && !uri.startsWith('http')) {
+      return { valid: false, error: 'Invalid image URI' };
+    }
+    
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: 'Image validation failed' };
+  }
+}
+
+/**
+ * Get image dimensions (helper function)
+ */
+export function getImageDimensions(uri: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      resolve({ width: image.width, height: image.height });
+    };
+    image.onerror = () => {
+      reject(new Error('Failed to load image dimensions'));
+    };
+    image.src = uri;
+  });
+}
+
+export default {
+  generatePlaceholderAvatar,
+  uploadProfileImage,
+  deleteProfileImage,
+  compressImage,
+  validateImage,
+  getImageDimensions
 };

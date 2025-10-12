@@ -1,6 +1,6 @@
 /**
  * AI Insights Screen Component
- * Professional AI-powered financial insights with scanner-like UI
+ * Comprehensive financial insights powered by Google Gemini AI
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -8,29 +8,33 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Animated, {
-    FadeInUp,
-    SlideInRight,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-    withTiming
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming
 } from 'react-native-reanimated';
 
 import { useTheme } from '../contexts/ThemeContext';
-import { AIInsightsData, aiInsightsService, SmartSuggestion, SpendingInsight } from '../services/aiInsightsService';
+import { TimePeriod } from '../services/databaseService';
+import {
+  AIInsights,
+  enhancedGeminiAIInsightsService
+} from '../services/enhancedGeminiAIInsightsService';
+import { auth } from '../services/firebase/firebase';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -48,9 +52,9 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
   // State management
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [insightsData, setInsightsData] = useState<AIInsightsData | null>(null);
-  const [selectedPeriod, setSelectedPeriod] = useState<'week' | 'month' | 'year'>('month');
-  const [activeTab, setActiveTab] = useState<'insights' | 'suggestions'>('insights');
+  const [insightsData, setInsightsData] = useState<AIInsights | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('month');
+  const [activeTab, setActiveTab] = useState<'overview' | 'categories' | 'budgets' | 'goals' | 'recommendations'>('overview');
   
   // Animation values
   const slideValue = useSharedValue(0);
@@ -73,15 +77,33 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
     shadow: isDarkTheme ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.1)'
   };
 
-  // Load insights data
+  // Load comprehensive insights
   const loadInsights = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await aiInsightsService.getAIInsights(selectedPeriod);
-      setInsightsData(data);
+      console.log(`🔍 Loading AI insights for period: ${selectedPeriod}`);
+      
+      // Get current user
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        console.log('❌ No authenticated user found');
+        Alert.alert('Error', 'Please log in to view AI insights.');
+        return;
+      }
+      
+      const data = await enhancedGeminiAIInsightsService.generateAIInsights(currentUser.uid, selectedPeriod);
+      
+      if (data) {
+        setInsightsData(data);
+        console.log(`✅ Loaded insights with ₹${data.totalSpent} spent in ${data.totalTransactions} transactions`);
+      } else {
+        setInsightsData(null);
+        console.log('ℹ️ No insights data available');
+      }
     } catch (error) {
-      console.error('Error loading AI insights:', error);
+      console.error('❌ Error loading AI insights:', error);
       Alert.alert('Error', 'Failed to load AI insights. Please try again.');
+      setInsightsData(null);
     } finally {
       setLoading(false);
     }
@@ -128,9 +150,30 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
     }
   };
 
+  // Get category icon
+  const getCategoryIcon = (category: string): any => {
+    const iconMap: { [key: string]: string } = {
+      'Food & Dining': 'restaurant',
+      'food': 'restaurant',
+      'Transportation': 'car',
+      'transport': 'car',
+      'Shopping': 'bag',
+      'Entertainment': 'game-controller',
+      'Healthcare': 'medical',
+      'Bills & Utilities': 'flash',
+      'Education': 'school',
+      'Travel': 'airplane',
+      'income': 'wallet',
+      'Income': 'wallet',
+      'Other': 'ellipsis-horizontal'
+    };
+    return iconMap[category] || 'ellipsis-horizontal';
+  };
+
   // Render period selector
   const renderPeriodSelector = () => {
     const periods = [
+      { key: 'day', label: 'Today' },
       { key: 'week', label: 'Week' },
       { key: 'month', label: 'Month' },
       { key: 'year', label: 'Year' }
@@ -152,7 +195,7 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
                 elevation: 4
               }
             ]}
-            onPress={() => setSelectedPeriod(period.key as any)}
+            onPress={() => setSelectedPeriod(period.key as TimePeriod)}
           >
             <Text style={[
               styles.periodButtonText,
@@ -169,12 +212,20 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
   // Render tab selector
   const renderTabSelector = () => {
     const tabs = [
-      { key: 'insights', label: 'Smart Insights', icon: 'analytics' },
-      { key: 'suggestions', label: 'Recommendations', icon: 'bulb' }
+      { key: 'overview', label: 'Overview', icon: 'analytics' },
+      { key: 'categories', label: 'Categories', icon: 'pie-chart' },
+      { key: 'budgets', label: 'Budgets', icon: 'wallet' },
+      { key: 'goals', label: 'Goals', icon: 'flag' },
+      { key: 'recommendations', label: 'AI Tips', icon: 'bulb' }
     ];
 
     return (
-      <View style={[styles.tabSelector, { backgroundColor: colors.surface }]}>
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false}
+        style={[styles.tabSelector, { backgroundColor: colors.surface }]}
+        contentContainerStyle={styles.tabSelectorContent}
+      >
         {tabs.map(tab => (
           <TouchableOpacity
             key={tab.key}
@@ -186,7 +237,7 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
           >
             <Ionicons
               name={tab.icon as any}
-              size={20}
+              size={18}
               color={activeTab === tab.key ? colors.primary : colors.textSecondary}
             />
             <Text style={[
@@ -197,16 +248,16 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
     );
   };
 
-  // Render financial health card
-  const renderFinancialHealth = () => {
-    if (!insightsData || !insightsData.financial_health) return null;
+  // Render financial health overview
+  const renderFinancialHealthOverview = () => {
+    if (!insightsData) return null;
 
-    const { financial_health } = insightsData;
-    const healthColor = getHealthScoreColor(financial_health.health_score || 0);
+    const { healthScore, summary } = insightsData;
+    const healthColor = getHealthScoreColor(healthScore.overall);
 
     return (
       <Animated.View entering={FadeInUp.delay(200)}>
@@ -220,40 +271,41 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
               <Text style={styles.healthTitle}>Financial Health</Text>
             </View>
             <View style={[styles.healthScore, { borderColor: '#ffffff' }]}>
-              <Text style={styles.healthScoreText}>{financial_health.health_score || 0}</Text>
+              <Text style={styles.healthScoreText}>{healthScore.overall}</Text>
+              <Text style={styles.healthGrade}>{healthScore.grade}</Text>
             </View>
           </View>
           
           <View style={styles.healthMetrics}>
             <View style={styles.healthMetric}>
-              <Text style={styles.healthMetricLabel}>Total Spending</Text>
+              <Text style={styles.healthMetricLabel}>Total Expenses</Text>
               <Text style={styles.healthMetricValue}>
-                ₹{(financial_health.total_spending || 0).toLocaleString()}
+                ₹{summary.totalExpenses.toLocaleString()}
               </Text>
             </View>
             <View style={styles.healthMetric}>
-              <Text style={styles.healthMetricLabel}>Avg Transaction</Text>
+              <Text style={styles.healthMetricLabel}>Total Budget</Text>
               <Text style={styles.healthMetricValue}>
-                ₹{(financial_health.average_transaction || 0).toLocaleString()}
+                ₹{summary.totalBudget.toLocaleString()}
               </Text>
             </View>
             <View style={styles.healthMetric}>
-              <Text style={styles.healthMetricLabel}>Transactions</Text>
+              <Text style={styles.healthMetricLabel}>Savings Rate</Text>
               <Text style={styles.healthMetricValue}>
-                {financial_health.transaction_count || 0}
+                {summary.savingsRate}%
               </Text>
             </View>
           </View>
 
           <View style={styles.trendIndicator}>
             <Ionicons
-              name={financial_health.spending_trend === 'increasing' ? 'trending-up' : 
-                   financial_health.spending_trend === 'decreasing' ? 'trending-down' : 'remove'}
+              name={summary.financialMomentum === 'improving' ? 'trending-up' : 
+                   summary.financialMomentum === 'declining' ? 'trending-down' : 'remove'}
               size={20}
               color="#ffffff"
             />
             <Text style={styles.trendText}>
-              {(financial_health.spending_change_percent || 0) > 0 ? '+' : ''}{financial_health.spending_change_percent || 0}% from last period
+              Financial momentum: {summary.financialMomentum}
             </Text>
           </View>
         </LinearGradient>
@@ -261,34 +313,68 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
     );
   };
 
-  // Render financial overview with top categories
-  const renderFinancialOverview = () => {
-    if (!insightsData?.category_analysis) return null;
+  // Render key insights summary
+  const renderKeyInsights = () => {
+    if (!insightsData || insightsData.insights.length === 0) return null;
 
-    const categories = Object.entries(insightsData.category_analysis)
-      .sort(([_, a], [__, b]) => b.total - a.total)
-      .slice(0, 4);
+    const topInsights = insightsData.insights.slice(0, 3);
 
     return (
       <Animated.View entering={FadeInUp.delay(300)}>
         <View style={[styles.categoryCard, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Key AI Insights</Text>
+          {topInsights.map((insight, index) => (
+            <View key={insight.id} style={styles.insightSummaryItem}>
+              <View style={[styles.priorityDot, { backgroundColor: getPriorityColor(insight.priority) }]} />
+              <View style={styles.insightSummaryContent}>
+                <Text style={[styles.insightSummaryTitle, { color: colors.text }]} numberOfLines={1}>
+                  {insight.title}
+                </Text>
+                <Text style={[styles.insightSummaryDescription, { color: colors.textSecondary }]} numberOfLines={2}>
+                  {insight.description}
+                </Text>
+              </View>
+              <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(insight.priority) + '20' }]}>
+                <Text style={[styles.priorityBadgeText, { color: getPriorityColor(insight.priority) }]}>
+                  {insight.priority.toUpperCase()}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </Animated.View>
+    );
+  };
+
+  // Render top spending categories
+  const renderTopCategories = () => {
+    if (!insightsData || insightsData.categoryInsights.length === 0) return null;
+
+    const topCategories = insightsData.categoryInsights.slice(0, 4);
+
+    return (
+      <Animated.View entering={FadeInUp.delay(400)}>
+        <View style={[styles.categoryCard, { backgroundColor: colors.surface }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>Top Spending Categories</Text>
           <View style={styles.categoriesGrid}>
-            {categories.map(([category, data], index) => (
-              <View key={category} style={styles.categoryOverviewItem}>
+            {topCategories.map((category, index) => (
+              <View key={category.category} style={[styles.categoryOverviewItem, { backgroundColor: colors.surfaceHover }]}>
                 <Ionicons
-                  name={getCategoryIcon(category)}
+                  name={getCategoryIcon(category.category)}
                   size={20}
                   color={colors.primary}
                 />
                 <Text style={[styles.categoryName, { color: colors.text }]} numberOfLines={1}>
-                  {category}
+                  {category.category}
                 </Text>
                 <Text style={[styles.categoryAmount, { color: colors.textSecondary }]}>
-                  ₹{data.total.toLocaleString()}
+                  ₹{category.totalSpent.toLocaleString()}
                 </Text>
                 <Text style={[styles.categoryPercentage, { color: colors.textMuted }]}>
-                  {data.percentage}%
+                  {category.percentageOfTotal.toFixed(1)}% of total
+                </Text>
+                <Text style={[styles.categoryTransactions, { color: colors.textMuted }]}>
+                  {category.transactions} transactions
                 </Text>
               </View>
             ))}
@@ -298,142 +384,65 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
     );
   };
 
-  // Render spending insight card
-  const renderInsightCard = (insight: SpendingInsight, index: number) => {
-    // Safely handle priority with fallback
-    const priority = insight.priority || 'medium';
-    const priorityColor = getPriorityColor(priority);
-
-    return (
-      <Animated.View key={index} entering={FadeInUp.delay(300 + index * 100)}>
-        <View style={[styles.insightCard, { backgroundColor: colors.surface }]}>
-          <View style={styles.insightHeader}>
-            <View style={[styles.priorityDot, { backgroundColor: priorityColor }]} />
-            <Text style={[styles.insightTitle, { color: colors.text }]}>{insight.title || 'Financial Insight'}</Text>
-            {insight.actionable && (
-              <Ionicons name="arrow-forward" size={16} color={colors.textSecondary} />
-            )}
-          </View>
-          <Text style={[styles.insightDescription, { color: colors.textSecondary }]}>
-            {insight.description || 'No description available'}
-          </Text>
-          <View style={styles.insightFooter}>
-            <Text style={[styles.insightSuggestion, { color: colors.textMuted }]}>
-              {insight.suggestion || 'Continue monitoring your expenses'}
-            </Text>
-            <View style={[styles.priorityBadge, { backgroundColor: priorityColor + '20' }]}>
-              <Text style={[styles.priorityBadgeText, { color: priorityColor }]}>
-                {priority.toUpperCase()}
-              </Text>
-            </View>
-          </View>
-        </View>
-      </Animated.View>
-    );
-  };
-
-  // Render suggestion card
-  const renderSuggestionCard = (suggestion: SmartSuggestion, index: number) => {
-    const priorityColor = getPriorityColor(suggestion.priority);
-
-    return (
-      <Animated.View key={index} entering={SlideInRight.delay(200 + index * 100)}>
-        <TouchableOpacity
-          style={[styles.suggestionCard, { backgroundColor: colors.surface }]}
-          onPress={() => {
-            if (suggestion.actionable) {
-              Alert.alert(
-                suggestion.title,
-                suggestion.description + '\n\n' + 
-                (suggestion.suggested_amount ? `Suggested Amount: ₹${suggestion.suggested_amount}` : ''),
-                [
-                  { text: 'Dismiss', style: 'cancel' },
-                  { text: 'Take Action', onPress: () => {
-                    // Handle action based on suggestion type
-                    console.log('Taking action for:', suggestion.type);
-                  }}
-                ]
-              );
-            }
-          }}
-        >
-          <View style={styles.suggestionHeader}>
-            <Ionicons
-              name={suggestion.type === 'budget_recommendation' ? 'wallet' :
-                   suggestion.type === 'savings_opportunity' ? 'trending-up' :
-                   suggestion.type === 'goal_setting' ? 'flag' : 'bulb'}
-              size={24}
-              color={priorityColor}
-            />
-            <View style={styles.suggestionTitleContainer}>
-              <Text style={[styles.suggestionTitle, { color: colors.text }]}>
-                {suggestion.title}
-              </Text>
-              <View style={[styles.priorityBadge, { backgroundColor: priorityColor + '20' }]}>
-                <Text style={[styles.priorityBadgeText, { color: priorityColor }]}>
-                  {suggestion.priority}
-                </Text>
-              </View>
-            </View>
-          </View>
-          <Text style={[styles.suggestionDescription, { color: colors.textSecondary }]}>
-            {suggestion.description}
-          </Text>
-          {suggestion.suggested_amount && (
-            <View style={styles.suggestionAmount}>
-              <Text style={[styles.suggestionAmountText, { color: colors.primary }]}>
-                Suggested: ₹{suggestion.suggested_amount.toLocaleString()}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </Animated.View>
-    );
-  };
-
-  // Render category analysis
+  // Render category analysis tab
   const renderCategoryAnalysis = () => {
-    if (!insightsData?.category_analysis) return null;
-
-    const categories = Object.entries(insightsData.category_analysis)
-      .sort(([_, a], [__, b]) => b.total - a.total)
-      .slice(0, 5);
+    if (!insightsData?.categoryInsights) return null;
 
     return (
-      <View style={styles.analysisContainer}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Top Categories</Text>
-        {categories.map(([category, data], index) => (
-          <Animated.View key={category} entering={FadeInUp.delay(100 + index * 50)}>
+      <View style={styles.tabContent}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Category Performance</Text>
+        {insightsData.categoryInsights.map((category, index) => (
+          <Animated.View key={category.category} entering={FadeInUp.delay(100 + index * 50)}>
             <View style={[styles.categoryCard, { backgroundColor: colors.surface }]}>
               <View style={styles.categoryHeader}>
                 <Ionicons
-                  name={getCategoryIcon(category)}
+                  name={getCategoryIcon(category.category)}
                   size={24}
                   color={colors.primary}
                 />
                 <View style={styles.categoryInfo}>
-                  <Text style={[styles.categoryName, { color: colors.text }]}>{category}</Text>
+                  <Text style={[styles.categoryName, { color: colors.text }]}>{category.category}</Text>
                   <Text style={[styles.categoryCount, { color: colors.textSecondary }]}>
-                    {data.count} transactions
+                    {category.transactions} transactions • {category.comparison.replace('_', ' ')}
                   </Text>
                 </View>
-                <Text style={[styles.categoryAmount, { color: colors.text }]}>
-                  ₹{data.total.toLocaleString()}
-                </Text>
+                <View style={styles.categoryAmountContainer}>
+                  <Text style={[styles.categoryAmount, { color: colors.text }]}>
+                    ₹{category.totalSpent.toLocaleString()}
+                  </Text>
+                  <Text style={[styles.categoryPercentage, { color: colors.textSecondary }]}>
+                    {category.percentageOfTotal.toFixed(1)}%
+                  </Text>
+                </View>
               </View>
+              
               <View style={styles.categoryProgress}>
                 <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
                   <View
                     style={[
                       styles.progressFill,
-                      { backgroundColor: colors.primary, width: `${data.percentage}%` }
+                      { 
+                        backgroundColor: category.comparison === 'over_budget' ? colors.error : colors.primary, 
+                        width: `${Math.min(category.percentageOfTotal, 100)}%` 
+                      }
                     ]}
                   />
                 </View>
-                <Text style={[styles.categoryPercentage, { color: colors.textSecondary }]}>
-                  {data.percentage}%
+                <Text style={[styles.trendIndicatorText, { color: colors.textMuted }]}>
+                  Trend: {category.trend}
                 </Text>
               </View>
+
+              {category.recommendations.length > 0 && (
+                <View style={styles.categoryRecommendations}>
+                  <Text style={[styles.recommendationsTitle, { color: colors.text }]}>Recommendations:</Text>
+                  {category.recommendations.slice(0, 2).map((rec, idx) => (
+                    <Text key={idx} style={[styles.recommendationText, { color: colors.textSecondary }]}>
+                      • {rec}
+                    </Text>
+                  ))}
+                </View>
+              )}
             </View>
           </Animated.View>
         ))}
@@ -441,20 +450,285 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
     );
   };
 
-  // Get category icon
-  const getCategoryIcon = (category: string): any => {
-    const iconMap: { [key: string]: string } = {
-      'Food & Dining': 'restaurant',
-      'Transportation': 'car',
-      'Shopping': 'bag',
-      'Entertainment': 'game-controller',
-      'Healthcare': 'medical',
-      'Bills & Utilities': 'flash',
-      'Education': 'school',
-      'Travel': 'airplane',
-      'Other': 'ellipsis-horizontal'
-    };
-    return iconMap[category] || 'ellipsis-horizontal';
+  // Render budget performance tab
+  const renderBudgetPerformance = () => {
+    if (!insightsData?.budgetPerformance || insightsData.budgetPerformance.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <Ionicons name="wallet" size={48} color={colors.textMuted} />
+          <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
+            No budget data available
+          </Text>
+          <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
+            Set up budgets to track your spending performance
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.tabContent}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Budget Performance</Text>
+        {insightsData.budgetPerformance.map((budget, index) => (
+          <Animated.View key={budget.budgetName} entering={FadeInUp.delay(100 + index * 50)}>
+            <View style={[styles.budgetCard, { backgroundColor: colors.surface }]}>
+              <View style={styles.budgetHeader}>
+                <View style={styles.budgetTitleContainer}>
+                  <Text style={[styles.budgetTitle, { color: colors.text }]}>{budget.budgetName}</Text>
+                  <Text style={[styles.budgetDaysRemaining, { color: colors.textSecondary }]}>
+                    {budget.daysRemaining} days remaining
+                  </Text>
+                </View>
+                <View style={[styles.budgetStatusBadge, { 
+                  backgroundColor: budget.status === 'exceeded' ? colors.error + '20' : 
+                                  budget.status === 'warning' ? colors.warning + '20' : colors.success + '20' 
+                }]}>
+                  <Text style={[styles.budgetStatusText, { 
+                    color: budget.status === 'exceeded' ? colors.error : 
+                           budget.status === 'warning' ? colors.warning : colors.success 
+                  }]}>
+                    {budget.status.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.budgetAmounts}>
+                <View style={styles.budgetAmountItem}>
+                  <Text style={[styles.budgetAmountLabel, { color: colors.textMuted }]}>Allocated</Text>
+                  <Text style={[styles.budgetAmountValue, { color: colors.text }]}>
+                    ₹{budget.allocated.toLocaleString()}
+                  </Text>
+                </View>
+                <View style={styles.budgetAmountItem}>
+                  <Text style={[styles.budgetAmountLabel, { color: colors.textMuted }]}>Spent</Text>
+                  <Text style={[styles.budgetAmountValue, { color: colors.text }]}>
+                    ₹{budget.spent.toLocaleString()}
+                  </Text>
+                </View>
+                <View style={styles.budgetAmountItem}>
+                  <Text style={[styles.budgetAmountLabel, { color: colors.textMuted }]}>Remaining</Text>
+                  <Text style={[styles.budgetAmountValue, { 
+                    color: budget.remaining >= 0 ? colors.success : colors.error 
+                  }]}>
+                    ₹{budget.remaining.toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.categoryProgress}>
+                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { 
+                        backgroundColor: budget.percentageUsed > 100 ? colors.error : 
+                                        budget.percentageUsed > 80 ? colors.warning : colors.success,
+                        width: `${Math.min(budget.percentageUsed, 100)}%` 
+                      }
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.budgetPercentageText, { color: colors.textSecondary }]}>
+                  {budget.percentageUsed.toFixed(1)}% used
+                </Text>
+              </View>
+
+              {budget.recommendations.length > 0 && (
+                <View style={styles.budgetRecommendations}>
+                  {budget.recommendations.slice(0, 2).map((rec, idx) => (
+                    <Text key={idx} style={[styles.recommendationText, { color: colors.textSecondary }]}>
+                      • {rec}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          </Animated.View>
+        ))}
+      </View>
+    );
+  };
+
+  // Render goals progress tab
+  const renderGoalsProgress = () => {
+    if (!insightsData?.goalProgress || insightsData.goalProgress.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <Ionicons name="flag" size={48} color={colors.textMuted} />
+          <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
+            No financial goals set
+          </Text>
+          <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
+            Set financial goals to track your progress and get personalized advice
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.tabContent}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Goals Progress</Text>
+        {insightsData.goalProgress.map((goal, index) => (
+          <Animated.View key={goal.goalName} entering={FadeInUp.delay(100 + index * 50)}>
+            <View style={[styles.goalCard, { backgroundColor: colors.surface }]}>
+              <View style={styles.goalHeader}>
+                <View style={styles.goalInfo}>
+                  <Text style={[styles.goalTitle, { color: colors.text }]}>{goal.goalName}</Text>
+                  <Text style={[styles.goalTimeline, { color: colors.textSecondary }]}>
+                    {goal.monthsRemaining} months remaining
+                  </Text>
+                </View>
+                <View style={[styles.goalStatusBadge, { 
+                  backgroundColor: goal.onTrack ? colors.success + '20' : colors.warning + '20'
+                }]}>
+                  <Text style={[styles.goalStatusText, { 
+                    color: goal.onTrack ? colors.success : colors.warning 
+                  }]}>
+                    {goal.onTrack ? 'ON TRACK' : 'BEHIND'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.goalAmounts}>
+                <View style={styles.goalAmountItem}>
+                  <Text style={[styles.goalAmountLabel, { color: colors.textMuted }]}>Target</Text>
+                  <Text style={[styles.goalAmountValue, { color: colors.text }]}>
+                    ₹{goal.targetAmount.toLocaleString()}
+                  </Text>
+                </View>
+                <View style={styles.goalAmountItem}>
+                  <Text style={[styles.goalAmountLabel, { color: colors.textMuted }]}>Saved</Text>
+                  <Text style={[styles.goalAmountValue, { color: colors.text }]}>
+                    ₹{goal.savedAmount.toLocaleString()}
+                  </Text>
+                </View>
+                <View style={styles.goalAmountItem}>
+                  <Text style={[styles.goalAmountLabel, { color: colors.textMuted }]}>Monthly Need</Text>
+                  <Text style={[styles.goalAmountValue, { color: colors.text }]}>
+                    ₹{goal.monthlyTarget.toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.categoryProgress}>
+                <View style={[styles.progressBar, { backgroundColor: colors.border }]}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { 
+                        backgroundColor: goal.onTrack ? colors.success : colors.warning,
+                        width: `${Math.min(goal.percentageComplete, 100)}%` 
+                      }
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.goalPercentageText, { color: colors.textSecondary }]}>
+                  {goal.percentageComplete.toFixed(1)}% complete
+                </Text>
+              </View>
+
+              {goal.adjustedTimeline && (
+                <View style={styles.goalAdjustedTimeline}>
+                  <Ionicons name="time" size={16} color={colors.warning} />
+                  <Text style={[styles.adjustedTimelineText, { color: colors.warning }]}>
+                    Adjusted timeline: {goal.adjustedTimeline}
+                  </Text>
+                </View>
+              )}
+
+              {goal.recommendations.length > 0 && (
+                <View style={styles.goalRecommendations}>
+                  {goal.recommendations.slice(0, 2).map((rec, idx) => (
+                    <Text key={idx} style={[styles.recommendationText, { color: colors.textSecondary }]}>
+                      • {rec}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          </Animated.View>
+        ))}
+      </View>
+    );
+  };
+
+  // Render AI recommendations tab
+  const renderRecommendations = () => {
+    if (!insightsData?.recommendations) return null;
+
+    const { immediate, shortTerm, longTerm } = insightsData.recommendations;
+
+    return (
+      <View style={styles.tabContent}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>AI Recommendations</Text>
+        
+        {/* Immediate Actions */}
+        {immediate.length > 0 && (
+          <Animated.View entering={FadeInUp.delay(100)}>
+            <View style={[styles.recommendationSection, { backgroundColor: colors.surface }]}>
+              <View style={styles.recommendationSectionHeader}>
+                <Ionicons name="flash" size={20} color={colors.error} />
+                <Text style={[styles.recommendationSectionTitle, { color: colors.text }]}>
+                  Immediate Actions
+                </Text>
+              </View>
+              {immediate.map((rec, index) => (
+                <View key={index} style={styles.recommendationItem}>
+                  <View style={[styles.priorityDot, { backgroundColor: colors.error }]} />
+                  <Text style={[styles.recommendationItemText, { color: colors.textSecondary }]}>
+                    {rec}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        )}
+
+        {/* Short-term Goals */}
+        {shortTerm.length > 0 && (
+          <Animated.View entering={FadeInUp.delay(200)}>
+            <View style={[styles.recommendationSection, { backgroundColor: colors.surface }]}>
+              <View style={styles.recommendationSectionHeader}>
+                <Ionicons name="calendar" size={20} color={colors.warning} />
+                <Text style={[styles.recommendationSectionTitle, { color: colors.text }]}>
+                  Short-term (1-3 months)
+                </Text>
+              </View>
+              {shortTerm.map((rec, index) => (
+                <View key={index} style={styles.recommendationItem}>
+                  <View style={[styles.priorityDot, { backgroundColor: colors.warning }]} />
+                  <Text style={[styles.recommendationItemText, { color: colors.textSecondary }]}>
+                    {rec}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        )}
+
+        {/* Long-term Goals */}
+        {longTerm.length > 0 && (
+          <Animated.View entering={FadeInUp.delay(300)}>
+            <View style={[styles.recommendationSection, { backgroundColor: colors.surface }]}>
+              <View style={styles.recommendationSectionHeader}>
+                <Ionicons name="trending-up" size={20} color={colors.success} />
+                <Text style={[styles.recommendationSectionTitle, { color: colors.text }]}>
+                  Long-term (6+ months)
+                </Text>
+              </View>
+              {longTerm.map((rec, index) => (
+                <View key={index} style={styles.recommendationItem}>
+                  <View style={[styles.priorityDot, { backgroundColor: colors.success }]} />
+                  <Text style={[styles.recommendationItemText, { color: colors.textSecondary }]}>
+                    {rec}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        )}
+      </View>
+    );
   };
 
   // Render content based on active tab
@@ -462,42 +736,21 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
     if (!insightsData) return null;
 
     switch (activeTab) {
-      case 'insights':
+      case 'overview':
         return (
           <View style={styles.tabContent}>
-            {insightsData.spending_insights.map(renderInsightCard)}
-            {insightsData.spending_insights.length === 0 && (
-              <View style={styles.emptyState}>
-                <Ionicons name="analytics" size={48} color={colors.textMuted} />
-                <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
-                  No insights available yet
-                </Text>
-                <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
-                  Add more transactions to get AI-powered insights
-                </Text>
-              </View>
-            )}
+            {renderKeyInsights()}
+            {renderTopCategories()}
           </View>
         );
-
-      case 'suggestions':
-        return (
-          <View style={styles.tabContent}>
-            {insightsData.smart_suggestions.map(renderSuggestionCard)}
-            {insightsData.smart_suggestions.length === 0 && (
-              <View style={styles.emptyState}>
-                <Ionicons name="bulb" size={48} color={colors.textMuted} />
-                <Text style={[styles.emptyStateText, { color: colors.textMuted }]}>
-                  No suggestions available
-                </Text>
-                <Text style={[styles.emptyStateSubtext, { color: colors.textMuted }]}>
-                  Your spending looks good!
-                </Text>
-              </View>
-            )}
-          </View>
-        );
-
+      case 'categories':
+        return renderCategoryAnalysis();
+      case 'budgets':
+        return renderBudgetPerformance();
+      case 'goals':
+        return renderGoalsProgress();
+      case 'recommendations':
+        return renderRecommendations();
       default:
         return null;
     }
@@ -549,37 +802,31 @@ export const AIInsightsScreen: React.FC<AIInsightsScreenProps> = ({
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={colors.primary} />
                 <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                  Analyzing your financial data...
+                  Analyzing your financial data with AI...
                 </Text>
               </View>
             ) : insightsData === null ? (
-              /* No Real Data Available */
+              /* No Data Available */
               <View style={styles.emptyState}>
                 <Ionicons name="document-outline" size={64} color={colors.textMuted} />
                 <Text style={[styles.emptyStateText, { color: colors.text }]}>
-                  No Expense Data Found
+                  No Financial Data Found
                 </Text>
                 <Text style={[styles.emptyStateSubtext, { color: colors.textSecondary }]}>
-                  Add some expenses to your account to get personalized AI insights and financial analysis.
+                  Add expenses, set budgets, and create goals to get personalized AI insights and recommendations.
                 </Text>
                 <TouchableOpacity 
                   style={[styles.addDataButton, { backgroundColor: colors.primary }]}
-                  onPress={() => {
-                    onClose();
-                    // Navigate to add expense screen
-                  }}
+                  onPress={onClose}
                 >
                   <Ionicons name="add" size={20} color="#ffffff" />
-                  <Text style={styles.addDataButtonText}>Add Expenses</Text>
+                  <Text style={styles.addDataButtonText}>Get Started</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <>
-                {/* Financial Health Card */}
-                {renderFinancialHealth()}
-
-                {/* Quick Financial Overview */}
-                {renderFinancialOverview()}
+                {/* Financial Health Overview */}
+                {renderFinancialHealthOverview()}
 
                 {/* Tab Selector */}
                 {renderTabSelector()}
@@ -694,17 +941,22 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   healthScore: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     borderWidth: 3,
     justifyContent: 'center',
     alignItems: 'center',
   },
   healthScoreText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
     color: '#ffffff',
+  },
+  healthGrade: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   healthMetrics: {
     flexDirection: 'row',
@@ -735,118 +987,40 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   tabSelector: {
-    flexDirection: 'row',
-    padding: 6,
-    borderRadius: 12,
     marginBottom: 20,
+    borderRadius: 12,
+    paddingVertical: 6,
+  },
+  tabSelectorContent: {
+    paddingHorizontal: 6,
   },
   tabButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 12,
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
     borderRadius: 8,
+    marginHorizontal: 2,
+    minWidth: 100,
   },
   tabButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   tabContent: {
     gap: 16,
   },
-  insightCard: {
-    borderRadius: 12,
-    padding: 16,
-  },
-  insightHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 8,
-  },
-  priorityDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  insightTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  insightDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  insightFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-  },
-  insightSuggestion: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 16,
-    marginRight: 12,
-  },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  priorityBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  suggestionCard: {
-    borderRadius: 12,
-    padding: 16,
-  },
-  suggestionHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    marginBottom: 8,
-  },
-  suggestionTitleContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  suggestionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
-    marginRight: 12,
-  },
-  suggestionDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  suggestionAmount: {
-    alignItems: 'flex-end',
-  },
-  suggestionAmountText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  analysisContainer: {
-    gap: 16,
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   categoryCard: {
     borderRadius: 12,
     padding: 16,
+    marginBottom: 16,
   },
   categoryHeader: {
     flexDirection: 'row',
@@ -865,14 +1039,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  categoryAmountContainer: {
+    alignItems: 'flex-end',
+  },
   categoryAmount: {
     fontSize: 16,
     fontWeight: '700',
+  },
+  categoryPercentage: {
+    fontSize: 12,
+    marginTop: 2,
   },
   categoryProgress: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginBottom: 8,
   },
   progressBar: {
     flex: 1,
@@ -883,11 +1065,228 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 3,
   },
-  categoryPercentage: {
+  trendIndicatorText: {
     fontSize: 12,
     fontWeight: '500',
-    minWidth: 40,
+    minWidth: 60,
     textAlign: 'right',
+  },
+  categoryRecommendations: {
+    marginTop: 8,
+  },
+  recommendationsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  recommendationText: {
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 2,
+  },
+  categoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  categoryOverviewItem: {
+    width: '48%',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    gap: 6,
+  },
+  categoryTransactions: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  insightSummaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  priorityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 12,
+  },
+  insightSummaryContent: {
+    flex: 1,
+  },
+  insightSummaryTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  insightSummaryDescription: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  priorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  priorityBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  budgetCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  budgetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  budgetTitleContainer: {
+    flex: 1,
+  },
+  budgetTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  budgetDaysRemaining: {
+    fontSize: 12,
+  },
+  budgetStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  budgetStatusText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  budgetAmounts: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  budgetAmountItem: {
+    alignItems: 'center',
+  },
+  budgetAmountLabel: {
+    fontSize: 11,
+    marginBottom: 4,
+  },
+  budgetAmountValue: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  budgetPercentageText: {
+    fontSize: 12,
+    fontWeight: '500',
+    minWidth: 60,
+    textAlign: 'right',
+  },
+  budgetRecommendations: {
+    marginTop: 8,
+  },
+  goalCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  goalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  goalInfo: {
+    flex: 1,
+  },
+  goalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  goalTimeline: {
+    fontSize: 12,
+  },
+  goalStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  goalStatusText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  goalAmounts: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  goalAmountItem: {
+    alignItems: 'center',
+  },
+  goalAmountLabel: {
+    fontSize: 11,
+    marginBottom: 4,
+  },
+  goalAmountValue: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  goalProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  goalPercentageText: {
+    fontSize: 12,
+    fontWeight: '500',
+    minWidth: 60,
+    textAlign: 'right',
+  },
+  goalAdjustedTimeline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  adjustedTimelineText: {
+    fontSize: 12,
+    fontStyle: 'italic',
+  },
+  goalRecommendations: {
+    marginTop: 8,
+  },
+  recommendationSection: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  recommendationSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  recommendationSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  recommendationItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  recommendationItemText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    marginLeft: 8,
   },
   emptyState: {
     alignItems: 'center',
@@ -903,19 +1302,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  categoryOverviewItem: {
-    width: '48%',
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-    alignItems: 'center',
-    gap: 6,
+    paddingHorizontal: 32,
   },
   addDataButton: {
     flexDirection: 'row',

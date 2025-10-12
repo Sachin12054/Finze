@@ -47,7 +47,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider');
+    // Return default values instead of throwing error to prevent app crashes
+    console.warn('useTheme called outside ThemeProvider - using default values');
+    return {
+      isDarkTheme: false,
+      toggleTheme: () => console.warn('Theme toggle not available outside provider')
+    };
   }
   return context;
 };

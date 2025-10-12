@@ -8,6 +8,7 @@ import 'react-native-get-random-values';
 import 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { ThemeProvider as CustomThemeProvider } from '../src/contexts/ThemeContext';
+import { setupGlobalAsyncErrorHandling } from '../src/utils/asyncErrorHandler';
 import '../src/utils/consoleSuppressions'; // Import warning suppressions
 
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -40,6 +41,11 @@ export default function RootLayout() {
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
   const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    // Initialize global error handling
+    setupGlobalAsyncErrorHandling();
+  }, []);
 
   useEffect(() => {
     if (loaded) {

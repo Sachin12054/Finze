@@ -5,10 +5,10 @@
 
 // Backend URL options in order of preference (without /api suffix - added by services)
 export const BACKEND_URLS = [
-  'http://10.220.12.202:8001',    // Current working backend IP (PRIORITY)
+  'http://10.151.245.202:8001',    // Current working backend IP (PRIORITY)
+  'http://127.0.0.1:8001',         // Localhost (for desktop testing)
+  'http://localhost:8001',         // Alternative localhost
   'http://192.168.0.1:8001',      // Alternative local network IP
-  'http://localhost:8001',         // Localhost (for desktop testing only)
-  'http://127.0.0.1:8001',        // Loopback (backup for desktop)
   'http://10.0.2.2:8001',         // Android emulator bridge
 ] as const;
 

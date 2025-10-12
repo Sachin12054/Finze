@@ -202,7 +202,8 @@ export interface BaseExpense {
 }
 
 export interface ExpenseWithType extends BaseExpense {
-  type: 'manual' | 'ai_categorise' | 'scanner' | 'main';
+  type: 'manual' | 'ai_categorise' | 'scanner' | 'main' | 'transaction_history';
+  transactionType?: 'income' | 'expense'; // Original transaction type for filtering
   title?: string; // for manual
   raw_description?: string; // for AI
   predicted_category?: string; // for AI

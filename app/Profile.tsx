@@ -5,37 +5,54 @@ import { useRouter } from "expo-router";
 import { deleteUser, signOut, updatePassword, updateProfile } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
-  Dimensions,
-  Image,
-  Linking,
-  Platform,
-  ScrollView,
-  Share,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Vibration,
-  View,
+    Alert,
+    Dimensions,
+    Image,
+    Linking,
+    Platform,
+    ScrollView,
+    Share,
+    StatusBar,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    Vibration,
+    View,
 } from "react-native";
 import Animated, {
-  BounceIn,
-  FadeInDown,
-  FadeInUp,
-  SlideInLeft,
-  SlideInRight,
-  useAnimatedStyle,
-  useSharedValue,
-  withSequence,
-  withSpring
+    BounceIn,
+    FadeInDown,
+    FadeInUp,
+    SlideInLeft,
+    SlideInRight,
+    useAnimatedStyle,
+    useSharedValue,
+    withSequence,
+    withSpring
 } from "react-native-reanimated";
 import { databaseService } from "../src/services/databaseService";
 import { auth } from "../src/services/firebase/firebase";
 import { deleteProfileImage, generatePlaceholderAvatar, UploadProgress } from "../src/services/imageUploadService";
-import NotificationService from "../src/services/notificationService";
+
+// Conditional notification service import for Expo Go compatibility
+let NotificationService: any = null;
+try {
+  // This will work in development builds but fail gracefully in Expo Go
+  NotificationService = require("../src/services/notificationService").default;
+} catch (error) {
+  console.log('ℹ️ Notifications not available in Expo Go - using mock service');
+  // Mock notification service for Expo Go
+  NotificationService = {
+    requestPermissionsAsync: async () => ({ status: 'denied', canAskAgain: false }),
+    getPushToken: () => null,
+    sendLocalNotification: async () => 'mock-id',
+    scheduleNotification: async () => 'mock-id',
+    cancelNotification: async () => {},
+    cancelAllNotifications: async () => {},
+  };
+}
 
 const { width, height } = Dimensions.get('window');
 
@@ -105,9 +122,9 @@ export default function ProfileScreen() {
 
       try {
         const userDoc = await databaseService.getUserById(uid);
-        if (userDoc && userDoc.profile) {
-          const data = userDoc.profile;
-          setFullName(data.displayName || "");
+        if (userDoc) {
+          const data = userDoc;
+          setFullName(data.fullName || "");
           setDisplayName(data.displayName || auth.currentUser?.displayName || "User");
           setPhone(data.phone || "");
           setBio(""); // bio not in new schema
@@ -123,13 +140,11 @@ export default function ProfileScreen() {
           await databaseService.createUser({
             email: auth.currentUser?.email || "",
             displayName: defaultName,
-            profile: {
-              displayName: defaultName,
-              avatar_url: profilePic,
-              preferences: {
-                theme: 'light',
-                notifications: true
-              }
+            fullName: defaultName,
+            avatar_url: profilePic,
+            preferences: {
+              theme: 'light',
+              notifications: true
             }
           });
           setDisplayName(defaultName);
@@ -200,6 +215,7 @@ export default function ProfileScreen() {
     try {
       await databaseService.updateUserProfile(uid, {
         displayName,
+        fullName,
         phone,
         avatar_url: profilePic,
         preferences: {

@@ -2,25 +2,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
-    collection,
-    deleteDoc,
-    doc,
-    limit,
-    onSnapshot,
-    query,
-    updateDoc
+  collection,
+  deleteDoc,
+  doc,
+  limit,
+  onSnapshot,
+  query,
+  updateDoc
 } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Animated, { FadeInDown, FadeInRight, FadeInUp } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -38,11 +38,11 @@ import { BudgetTab } from '../../src/components/tabs/BudgetTab';
 
 // Import Enhanced Firebase Service for consistent data handling like index.tsx
 import {
-    Budget,
-    EnhancedFirebaseService,
-    SavingsGoal as FirebaseSavingsGoal,
-    Recurrence,
-    Transaction
+  Budget,
+  EnhancedFirebaseService,
+  SavingsGoal as FirebaseSavingsGoal,
+  Recurrence,
+  Transaction
 } from '../../src/services/firebase/enhancedFirebaseService';
 
 
@@ -123,9 +123,15 @@ export default function ExploreDashboard() {
   const loadAIInsights = async () => {
     if (!user) return;
     
+    const userId = auth.currentUser?.uid;
+    if (!userId) {
+      console.error('No user ID available for AI insights');
+      return;
+    }
+    
     setInsightsLoading(true);
     try {
-      const insights = await aiInsightsService.getAIInsights('month');
+      const insights = await aiInsightsService.getAIInsights('month', userId);
       setAIInsights(insights);
     } catch (error) {
       console.error('Error loading AI insights:', error);
