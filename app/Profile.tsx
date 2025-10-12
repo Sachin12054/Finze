@@ -555,14 +555,15 @@ export default function ProfileScreen() {
       
       {/* Header with Gradient */}
       <LinearGradient
-        colors={darkMode ? ['#667eea', '#764ba2'] : ['#4facfe', '#00f2fe']}
+        colors={darkMode ? ['#667eea', '#764ba2', '#667eea'] : ['#4facfe', '#00f2fe', '#4facfe']}
         style={styles.headerGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
+        locations={[0, 0.5, 1]}
       >
         <Animated.View entering={FadeInUp.duration(800)} style={styles.headerContent}>
           <View style={styles.headerTop}>
-            <TouchableOpacity onPress={() => router.back()}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerAction}>
               <Ionicons 
                 name="arrow-back" 
                 size={24} 
@@ -645,7 +646,12 @@ export default function ProfileScreen() {
           <View style={styles.inputContainer}>
             <Text style={[styles.label, darkMode && styles.darkLabel]}>Full Name</Text>
             <TextInput
-              style={[styles.input, darkMode && styles.darkInput, !editMode && styles.inputDisabled]}
+              style={[
+                styles.input, 
+                darkMode && styles.darkInput, 
+                !editMode && styles.inputDisabled,
+                editMode && { borderColor: "#4facfe", shadowOpacity: 0.15 }
+              ]}
               placeholder="Enter your full name"
               placeholderTextColor={darkMode ? "#999" : "#666"}
               value={fullName}
@@ -657,7 +663,12 @@ export default function ProfileScreen() {
           <View style={styles.inputContainer}>
             <Text style={[styles.label, darkMode && styles.darkLabel]}>Display Name</Text>
             <TextInput
-              style={[styles.input, darkMode && styles.darkInput, !editMode && styles.inputDisabled]}
+              style={[
+                styles.input, 
+                darkMode && styles.darkInput, 
+                !editMode && styles.inputDisabled,
+                editMode && { borderColor: "#4facfe", shadowOpacity: 0.15 }
+              ]}
               placeholder="How others see you"
               placeholderTextColor={darkMode ? "#999" : "#666"}
               value={displayName}
@@ -669,7 +680,12 @@ export default function ProfileScreen() {
           <View style={styles.inputContainer}>
             <Text style={[styles.label, darkMode && styles.darkLabel]}>Phone Number</Text>
             <TextInput
-              style={[styles.input, darkMode && styles.darkInput, !editMode && styles.inputDisabled]}
+              style={[
+                styles.input, 
+                darkMode && styles.darkInput, 
+                !editMode && styles.inputDisabled,
+                editMode && { borderColor: "#4facfe", shadowOpacity: 0.15 }
+              ]}
               placeholder="+1 (555) 123-4567"
               placeholderTextColor={darkMode ? "#999" : "#666"}
               value={phone}
@@ -682,7 +698,12 @@ export default function ProfileScreen() {
           <View style={styles.inputContainer}>
             <Text style={[styles.label, darkMode && styles.darkLabel]}>Bio</Text>
             <TextInput
-              style={[styles.textArea, darkMode && styles.darkInput, !editMode && styles.inputDisabled]}
+              style={[
+                styles.textArea, 
+                darkMode && styles.darkInput, 
+                !editMode && styles.inputDisabled,
+                editMode && { borderColor: "#4facfe", shadowOpacity: 0.15 }
+              ]}
               placeholder="Tell others about yourself..."
               placeholderTextColor={darkMode ? "#999" : "#666"}
               value={bio}
@@ -696,7 +717,12 @@ export default function ProfileScreen() {
           <View style={styles.inputContainer}>
             <Text style={[styles.label, darkMode && styles.darkLabel]}>Location</Text>
             <TextInput
-              style={[styles.input, darkMode && styles.darkInput, !editMode && styles.inputDisabled]}
+              style={[
+                styles.input, 
+                darkMode && styles.darkInput, 
+                !editMode && styles.inputDisabled,
+                editMode && { borderColor: "#4facfe", shadowOpacity: 0.15 }
+              ]}
               placeholder="City, Country"
               placeholderTextColor={darkMode ? "#999" : "#666"}
               value={location}
@@ -709,7 +735,13 @@ export default function ProfileScreen() {
             <Text style={[styles.label, darkMode && styles.darkLabel]}>Website</Text>
             <View style={styles.websiteContainer}>
               <TextInput
-                style={[styles.input, styles.websiteInput, darkMode && styles.darkInput, !editMode && styles.inputDisabled]}
+                style={[
+                  styles.input, 
+                  styles.websiteInput, 
+                  darkMode && styles.darkInput, 
+                  !editMode && styles.inputDisabled,
+                  editMode && { borderColor: "#4facfe", shadowOpacity: 0.15 }
+                ]}
                 placeholder="www.yourwebsite.com"
                 placeholderTextColor={darkMode ? "#999" : "#666"}
                 value={website}
@@ -844,10 +876,11 @@ export default function ProfileScreen() {
         {editMode && (
           <Animated.View entering={BounceIn.delay(1400).duration(800)}>
             <LinearGradient
-              colors={['#4facfe', '#00f2fe']}
+              colors={['#4facfe', '#00f2fe', '#4facfe']}
               style={styles.saveButton}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
+              locations={[0, 0.5, 1]}
             >
               <TouchableOpacity 
                 onPress={() => animateButton(saveProfile)}
@@ -881,263 +914,81 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#f7f9fc",
   },
   darkContainer: {
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#0f0f23",
   },
   headerGradient: {
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    paddingBottom: 30,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 40,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 10,
   },
   headerContent: {
     alignItems: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
   },
   headerTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     width: "100%",
-    marginBottom: 20,
+    marginBottom: 32,
   },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
   },
   headerAction: {
-    marginLeft: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+    backdropFilter: "blur(10px)",
   },
   avatarContainer: {
     position: "relative",
-    marginBottom: 15,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 12,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 15,
   },
   avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 4,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 6,
     borderColor: "#fff",
   },
   avatarOverlay: {
     position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    borderRadius: 20,
-    width: 40,
-    height: 40,
+    bottom: 8,
+    right: 8,
+    backgroundColor: "rgba(79, 172, 254, 0.9)",
+    borderRadius: 24,
+    width: 48,
+    height: 48,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: "#fff",
-  },
-  uploadOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    borderRadius: 60,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  progressContainer: {
-    alignItems: "center",
-    padding: 15,
-  },
-  progressText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  progressBar: {
-    width: 80,
-    height: 4,
-    backgroundColor: "rgba(255,255,255,0.3)",
-    borderRadius: 2,
-    marginBottom: 8,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#4facfe",
-    borderRadius: 2,
-  },
-  progressPercent: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  name: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 5,
-  },
-  email: {
-    fontSize: 16,
-    color: "rgba(255,255,255,0.9)",
-    marginBottom: 10,
-  },
-  bio: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.8)",
-    textAlign: "center",
-    fontStyle: "italic",
-    maxWidth: width * 0.8,
-  },
-  scrollContainer: {
-    flex: 1,
-    marginTop: -20,
-  },
-  card: {
-    backgroundColor: "#fff",
-    marginHorizontal: 20,
-    marginVertical: 10,
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  darkCard: {
-    backgroundColor: "#2a2a2a",
-    shadowColor: "#fff",
-    shadowOpacity: 0.05,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  section: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginLeft: 10,
-    color: "#333",
-  },
-  darkText: {
-    color: "#fff",
-  },
-  darkLabel: {
-    color: "#ccc",
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#666",
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#e1e5e9",
-    backgroundColor: "#f8f9fa",
-    padding: 15,
-    borderRadius: 12,
-    fontSize: 16,
-    color: "#333",
-  },
-  darkInput: {
-    borderColor: "#444",
-    backgroundColor: "#333",
-    color: "#fff",
-  },
-  inputDisabled: {
-    opacity: 0.7,
-  },
-  textArea: {
-    borderWidth: 1,
-    borderColor: "#e1e5e9",
-    backgroundColor: "#f8f9fa",
-    padding: 15,
-    borderRadius: 12,
-    fontSize: 16,
-    color: "#333",
-    minHeight: 80,
-    textAlignVertical: "top",
-  },
-  websiteContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  websiteInput: {
-    flex: 1,
-  },
-  linkButton: {
-    marginLeft: 10,
-    padding: 10,
-  },
-  actionButton: {
-    backgroundColor: "#f8f9fa",
-    padding: 16,
-    borderRadius: 12,
-    marginVertical: 4,
-    borderWidth: 1,
-    borderColor: "#e1e5e9",
-  },
-  darkButton: {
-    backgroundColor: "#333",
-    borderColor: "#444",
-  },
-  buttonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  actionButtonText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#333",
-    flex: 1,
-    marginLeft: 12,
-  },
-  dangerButton: {
-    backgroundColor: "#fff5f5",
-    borderColor: "#ffebee",
-  },
-  dangerButtonText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#ff3b30",
-    flex: 1,
-    marginLeft: 12,
-  },
-  switchContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-  },
-  switchContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  switchLabel: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#333",
-    marginLeft: 12,
-  },
-  saveButton: {
-    marginHorizontal: 20,
-    marginVertical: 20,
-    borderRadius: 15,
     shadowColor: "#4facfe",
     shadowOffset: {
       width: 0,
@@ -1147,47 +998,316 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  saveButtonInner: {
-    flexDirection: "row",
-    alignItems: "center",
+  uploadOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(15, 15, 35, 0.85)",
+    borderRadius: 70,
     justifyContent: "center",
-    padding: 18,
+    alignItems: "center",
+    backdropFilter: "blur(10px)",
   },
-  saveText: {
-    fontSize: 18,
-    fontWeight: "600",
+  progressContainer: {
+    alignItems: "center",
+    padding: 20,
+  },
+  progressText: {
     color: "#fff",
-    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 12,
+    textAlign: "center",
+    letterSpacing: 0.5,
   },
-  logoutBtn: {
-    marginHorizontal: 20,
-    marginTop: 10,
-    marginBottom: 20,
-    padding: 18,
-    backgroundColor: "#fff",
-    borderRadius: 15,
+  progressBar: {
+    width: 100,
+    height: 6,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 3,
+    marginBottom: 12,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#4facfe",
+    borderRadius: 3,
+  },
+  progressPercent: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1,
+  },
+  name: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 8,
+    letterSpacing: 0.5,
+    textShadowColor: "rgba(0,0,0,0.2)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  email: {
+    fontSize: 16,
+    color: "rgba(255,255,255,0.85)",
+    marginBottom: 12,
+    fontWeight: "500",
+    letterSpacing: 0.3,
+  },
+  bio: {
+    fontSize: 15,
+    color: "rgba(255,255,255,0.75)",
+    textAlign: "center",
+    fontStyle: "italic",
+    maxWidth: width * 0.85,
+    lineHeight: 22,
+    letterSpacing: 0.2,
+  },
+  scrollContainer: {
+    flex: 1,
+    marginTop: -24,
+  },
+  card: {
+    backgroundColor: "#ffffff",
+    marginHorizontal: 24,
+    marginVertical: 12,
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "rgba(79, 172, 254, 0.08)",
+  },
+  darkCard: {
+    backgroundColor: "#1e1e2e",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    borderColor: "rgba(79, 172, 254, 0.15)",
+  },
+  cardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e1e5e9",
-    shadowColor: "#000",
+    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(79, 172, 254, 0.1)",
+  },
+  section: {
+    fontSize: 20,
+    fontWeight: "700",
+    marginLeft: 12,
+    color: "#1a1a2e",
+    letterSpacing: 0.3,
+  },
+  darkText: {
+    color: "#f8f9fc",
+  },
+  darkLabel: {
+    color: "#e0e0e6",
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#6b7280",
+    marginBottom: 10,
+    letterSpacing: 0.2,
+  },
+  input: {
+    borderWidth: 2,
+    borderColor: "rgba(79, 172, 254, 0.15)",
+    backgroundColor: "#f8f9fc",
+    padding: 18,
+    borderRadius: 16,
+    fontSize: 16,
+    color: "#1a1a2e",
+    fontWeight: "500",
+    shadowColor: "#4facfe",
     shadowOffset: {
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  darkInput: {
+    borderColor: "rgba(79, 172, 254, 0.25)",
+    backgroundColor: "#2a2a3e",
+    color: "#f8f9fc",
+  },
+  inputDisabled: {
+    opacity: 0.6,
+    backgroundColor: "#f1f3f5",
+  },
+  textArea: {
+    borderWidth: 2,
+    borderColor: "rgba(79, 172, 254, 0.15)",
+    backgroundColor: "#f8f9fc",
+    padding: 18,
+    borderRadius: 16,
+    fontSize: 16,
+    color: "#1a1a2e",
+    fontWeight: "500",
+    minHeight: 100,
+    textAlignVertical: "top",
+    shadowColor: "#4facfe",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  websiteContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  websiteInput: {
+    flex: 1,
+  },
+  linkButton: {
+    marginLeft: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "rgba(79, 172, 254, 0.1)",
+  },
+  actionButton: {
+    backgroundColor: "#f8f9fc",
+    padding: 20,
+    borderRadius: 16,
+    marginVertical: 6,
+    borderWidth: 2,
+    borderColor: "rgba(79, 172, 254, 0.08)",
+    shadowColor: "#4facfe",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 3,
   },
-  darkLogoutBtn: {
-    backgroundColor: "#2a2a2a",
-    borderColor: "#444",
+  darkButton: {
+    backgroundColor: "#2a2a3e",
+    borderColor: "rgba(79, 172, 254, 0.15)",
   },
-  logoutText: {
+  buttonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  actionButtonText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
-    marginLeft: 8,
+    color: "#1a1a2e",
+    flex: 1,
+    marginLeft: 16,
+    letterSpacing: 0.2,
+  },
+  dangerButton: {
+    backgroundColor: "#fff8f8",
+    borderColor: "rgba(255, 59, 48, 0.15)",
+  },
+  dangerButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ff3b30",
+    flex: 1,
+    marginLeft: 16,
+    letterSpacing: 0.2,
+  },
+  switchContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(79, 172, 254, 0.03)",
+    marginVertical: 4,
+  },
+  switchContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  switchLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1a1a2e",
+    marginLeft: 16,
+    letterSpacing: 0.2,
+  },
+  saveButton: {
+    marginHorizontal: 24,
+    marginVertical: 24,
+    borderRadius: 20,
+    shadowColor: "#4facfe",
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  saveButtonInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  saveText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+    marginLeft: 12,
+    letterSpacing: 0.5,
+  },
+  logoutBtn: {
+    marginHorizontal: 24,
+    marginTop: 12,
+    marginBottom: 32,
+    padding: 20,
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255, 59, 48, 0.15)",
+    shadowColor: "#ff3b30",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  darkLogoutBtn: {
+    backgroundColor: "#1e1e2e",
+    borderColor: "rgba(255, 59, 48, 0.25)",
+  },
+  logoutText: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#ff3b30",
+    marginLeft: 12,
+    letterSpacing: 0.3,
   },
 });
