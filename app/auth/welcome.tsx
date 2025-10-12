@@ -3,14 +3,15 @@ import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Animated,
+    Dimensions,
+    Image,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../src/contexts/ThemeContext';
@@ -31,6 +32,7 @@ export default function Welcome() {
   const loginButtonScale = useRef(new Animated.Value(1)).current;
   const themeToggleScale = useRef(new Animated.Value(1)).current;
   const themeToggleRotate = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
     // Check if running in Expo Go
@@ -53,6 +55,12 @@ export default function Welcome() {
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 1000,
+        useNativeDriver: true,
+      }),
+      Animated.spring(logoScale, {
+        toValue: 1,
+        tension: 50,
+        friction: 8,
         useNativeDriver: true,
       }),
     ]).start();
@@ -178,9 +186,17 @@ export default function Welcome() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <View style={styles.logoCircle}>
-              <Ionicons name="wallet" size={36} color="#ffffff" />
-            </View>
+            <Animated.View style={[
+              styles.logoCircle, 
+              isDarkTheme && styles.logoCircleDark,
+              { transform: [{ scale: logoScale }] }
+            ]}>
+              <Image
+                source={require('../../assets/Logo/Logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+            </Animated.View>
           </View>
           
           <Text style={[styles.welcomeTitle, isDarkTheme && styles.welcomeTitleDark]}>Welcome to Finze! 👋</Text>
@@ -255,7 +271,7 @@ export default function Welcome() {
         {/* Terms and Privacy */}
         <View style={styles.footer}>
           <Text style={[styles.termsText, isDarkTheme && styles.termsTextDark]}>
-            By continuing, you agree to our{'                  '}
+            By continuing, you agree to our{' '}
             <Text style={[styles.linkText, isDarkTheme && styles.linkTextDark]}>Terms of Service</Text> and{' '}
             <Text style={[styles.linkText, isDarkTheme && styles.linkTextDark]}>Privacy Policy</Text>
           </Text>
@@ -292,12 +308,12 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 100,
-    paddingBottom: 110,
+    paddingTop: 80,
+    paddingBottom: 40,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 60,
+    marginBottom: 40,
     paddingTop: 0,
   },
   logoContainer: {
@@ -305,18 +321,30 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   logoCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#007AFF',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    shadowColor: '#007AFF',
+    shadowColor: '#3b82f6',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 20,
     elevation: 10,
+    borderWidth: 3,
+    borderColor: '#e2e8f0',
+  },
+  logoCircleDark: {
+    backgroundColor: '#ffffff',
+    borderColor: '#334155',
+    shadowColor: '#10b981',
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   logoText: {
     fontSize: 36,
@@ -335,7 +363,7 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     textAlign: 'center',
     marginBottom: 16,
-    marginTop: -30,
+    marginTop: -20,
     lineHeight: 36,
   },
   welcomeTitleDark: {
@@ -353,9 +381,9 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
   },
   authContainer: {
-    flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     paddingHorizontal: 4,
+    marginBottom: 30,
   },
   authButton: {
     flexDirection: 'row',
@@ -436,7 +464,7 @@ const styles = StyleSheet.create({
     borderRadius: 25,
     paddingVertical: 18,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 30,
     shadowColor: '#007AFF',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -455,6 +483,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     marginTop: 20,
+    paddingBottom: 20,
   },
   termsText: {
     fontSize: 13,

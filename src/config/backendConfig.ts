@@ -5,11 +5,12 @@
 
 // Backend URL options in order of preference (without /api suffix - added by services)
 export const BACKEND_URLS = [
-  'http://10.151.245.202:8001',    // Current working backend IP (PRIORITY)
-  'http://127.0.0.1:8001',         // Localhost (for desktop testing)
-  'http://localhost:8001',         // Alternative localhost
-  'http://192.168.0.1:8001',      // Alternative local network IP
-  'http://10.0.2.2:8001',         // Android emulator bridge
+  'https://finze-backend-fnah.onrender.com',    // Production Render deployment (PRIORITY)
+  'http://10.151.245.202:8001',                 // Local development server
+  'http://127.0.0.1:8001',                      // Localhost (for desktop testing)
+  'http://localhost:8001',                      // Alternative localhost
+  'http://192.168.0.1:8001',                   // Alternative local network IP
+  'http://10.0.2.2:8001',                      // Android emulator bridge
 ] as const;
 
 export interface BackendHealthResponse {
@@ -88,7 +89,7 @@ export async function findBestBackendUrl(): Promise<string | null> {
  * Get the default backend URL (Render production)
  */
 export function getDefaultBackendUrl(): string {
-  return BACKEND_URLS[0]; // Render production URL
+  return BACKEND_URLS[0]; // Production Render URL
 }
 
 /**

@@ -31,36 +31,50 @@ class EnhancedGeminiAIInsightsService {
   private readonly API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
   private readonly GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
 
+  /**
+   * Filter transactions to only include expenses (exclude income)
+   */
+  private filterExpensesOnly(transactions: any[]): any[] {
+    return transactions.filter(transaction => 
+      transaction.type !== 'income' && 
+      transaction.type !== 'Income' &&
+      (!transaction.category || transaction.category.toLowerCase() !== 'income')
+    );
+  }
+
   async generateAIInsights(userId: string, period: TimePeriod = 'month'): Promise<AIInsights> {
     try {
       console.log(`🔄 Generating comprehensive AI insights for user ${userId} (${period})`);
       
       // Get expenses filtered by time period directly from database
       const allExpenses = await getAllExpenses(userId, period);
-      console.log(`📊 Found ${allExpenses.length} expenses for ${period} period`);
+      // Filter out income transactions to ensure only expenses are analyzed
+      const filteredExpenses = this.filterExpensesOnly(allExpenses);
+      console.log(`📊 Found ${allExpenses.length} total transactions, ${filteredExpenses.length} expenses for ${period} period`);
       
-      if (allExpenses.length === 0) {
+      if (filteredExpenses.length === 0) {
         return this.generateEmptyInsights();
       }
 
       // Get all expenses for comparison analysis
       const allExpensesUnfiltered = await getAllExpenses(userId);
-      console.log(`� Total expenses (all time): ${allExpensesUnfiltered.length}`);
+      const allFilteredExpenses = this.filterExpensesOnly(allExpensesUnfiltered);
+      console.log(`🌍 Total expenses (all time): ${allFilteredExpenses.length}`);
 
       // Calculate comprehensive financial metrics
-      const metrics = this.calculateFinancialMetrics(allExpenses, allExpensesUnfiltered);
+      const metrics = this.calculateFinancialMetrics(filteredExpenses, allFilteredExpenses);
       
       // Generate time-based analysis
-      const timeBasedAnalysis = this.generateTimeBasedAnalysis(allExpensesUnfiltered);
+      const timeBasedAnalysis = this.generateTimeBasedAnalysis(allFilteredExpenses);
       
       // Generate spending insights
-      const spendingInsights = this.generateSpendingInsights(allExpenses, allExpensesUnfiltered);
+      const spendingInsights = this.generateSpendingInsights(filteredExpenses, allFilteredExpenses);
 
       console.log(`💰 Analytics: ₹${metrics.totalSpent.toFixed(2)} spent in ${metrics.totalTransactions} transactions (${period})`);
       console.log(`📋 Categories:`, Object.keys(metrics.categoryBreakdown).map(cat => `${cat}: ₹${metrics.categoryBreakdown[cat].toFixed(2)}`).join(', '));
 
       // Generate AI insights using Gemini with enhanced data
-      const aiAnalysis = await this.callGeminiAPI(allExpenses, metrics, timeBasedAnalysis, spendingInsights, period);
+      const aiAnalysis = await this.callGeminiAPI(filteredExpenses, metrics, timeBasedAnalysis, spendingInsights, period);
 
       return {
         summary: aiAnalysis.summary || `You've spent ₹${metrics.totalSpent.toFixed(2)} across ${metrics.totalTransactions} transactions this ${period}. ${this.getSmartSummary(timeBasedAnalysis, spendingInsights, metrics)}`,

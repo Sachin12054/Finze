@@ -351,23 +351,23 @@ export class EnhancedFirebaseService {
       manualTransactions = snapshot.docs
         .filter(doc => {
           const data = doc.data();
-          // ONLY include expenses, exclude income transactions
-          const isExpense = data.type === 'expense' || !data.type; // Default to expense if type is missing
-          if (!isExpense) {
-            console.log('Filtering out income transaction:', data.title, data.amount, data.type);
+          // Include both income and expenses for transaction history
+          const isValidTransaction = data.type === 'expense' || data.type === 'income' || !data.type;
+          if (!isValidTransaction) {
+            console.log('Filtering out invalid transaction type:', data.title, data.amount, data.type);
           }
-          return isExpense;
+          return isValidTransaction;
         })
         .map(doc => {
           const data = doc.data();
-          console.log('Processing manual expense:', doc.id, data);
+          console.log('Processing manual transaction:', doc.id, data);
           return {
             id: doc.id,
             userId: data.user_id,
             title: data.title,
             amount: data.amount,
             category: data.category,
-            type: data.type,
+            type: data.type || 'expense', // Default to expense if type is missing
             source: data.source || 'Manual',
             description: data.description,
             date: data.date,
@@ -378,7 +378,7 @@ export class EnhancedFirebaseService {
         }) as Transaction[];
       
       if (this.shouldLog()) {
-        console.log('Total manual transactions (expenses only):', manualTransactions.length);
+        console.log('Total manual transactions (income + expenses):', manualTransactions.length);
       }
       combineAndCallback();
     });

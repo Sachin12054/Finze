@@ -29,6 +29,17 @@ class GeminiAIInsightsService {
   private readonly API_KEY = 'AIzaSyDKQzJfaHZCH-HKUajkQ8PNa8A4yzl4YaE';
   private readonly GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
 
+  /**
+   * Filter transactions to only include expenses (exclude income)
+   */
+  private filterExpensesOnly(transactions: any[]): any[] {
+    return transactions.filter(transaction => 
+      transaction.type !== 'income' && 
+      transaction.type !== 'Income' &&
+      (!transaction.category || transaction.category.toLowerCase() !== 'income')
+    );
+  }
+
   async generateAIInsights(userId: string, period: 'day' | 'week' | 'month' | 'quarter' | 'year' = 'month'): Promise<AIInsights> {
     if (!userId || userId.trim() === '') {
       throw new Error('User ID is required for AI insights generation');
@@ -39,14 +50,16 @@ class GeminiAIInsightsService {
 
       // Get all expenses for the user
       const allExpenses = await getAllExpenses(userId);
-      console.log(`📊 Found ${allExpenses.length} total expenses`);
+      // Filter out income transactions to ensure only expenses are analyzed
+      const expensesOnly = this.filterExpensesOnly(allExpenses);
+      console.log(`📊 Found ${allExpenses.length} total transactions, ${expensesOnly.length} expenses`);
 
-      if (allExpenses.length === 0) {
+      if (expensesOnly.length === 0) {
         return this.generateEmptyInsights();
       }
 
       // Filter expenses based on the specified period
-      const filteredExpenses = this.filterExpensesByPeriod(allExpenses, period);
+      const filteredExpenses = this.filterExpensesByPeriod(expensesOnly, period);
       console.log(`📅 Found ${filteredExpenses.length} expenses for ${period} period`);
 
       if (filteredExpenses.length === 0) {
