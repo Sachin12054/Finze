@@ -512,20 +512,40 @@ Focus on:
 
   private parseGeminiResponse(aiText: string) {
     try {
-      // Extract JSON from AI response
-      const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+      // Clean the text first
+      const cleanText = aiText.trim();
+      
+      // Try to extract JSON from AI response
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        
+        // Ensure all fields are strings and clean
+        return {
+          summary: typeof parsed.summary === 'string' ? parsed.summary.replace(/[\n\r]/g, ' ').trim() : 'AI analysis completed successfully.',
+          recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.filter((r: any) => typeof r === 'string') : ['Review your spending patterns', 'Set category-wise budgets', 'Track expenses regularly'],
+          spendingTrends: typeof parsed.spendingTrends === 'string' ? parsed.spendingTrends.replace(/[\n\r]/g, ' ').trim() : 'Advanced patterns identified in your transactions.',
+          budgetSuggestions: Array.isArray(parsed.budgetSuggestions) ? parsed.budgetSuggestions.filter((s: any) => typeof s === 'string') : ['Consider budgeting based on your top categories', 'Set weekly spending limits']
+        };
       }
     } catch (error) {
       console.warn('Failed to parse Gemini response:', error);
     }
     
-    // Fallback parsing
+    // Fallback parsing - clean any JSON artifacts from text
+    const cleanSummary = aiText
+      .replace(/[\{\}]/g, '') // Remove JSON brackets
+      .replace(/["']/g, '') // Remove quotes
+      .replace(/summary:|recommendations:|spendingTrends:|budgetSuggestions:/gi, '') // Remove JSON keys
+      .replace(/[\n\r]/g, ' ') // Replace newlines with spaces
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .trim()
+      .substring(0, 300);
+    
     return {
-      summary: aiText.substring(0, 300) || 'Comprehensive AI analysis completed successfully.',
+      summary: cleanSummary || 'Comprehensive AI analysis completed successfully.',
       recommendations: ['Review your spending patterns', 'Set category-wise budgets', 'Track expenses regularly', 'Look for savings opportunities'],
-      spendingTrends: 'Advanced patterns identified in your transactions across different time periods',
+      spendingTrends: 'Advanced patterns identified in your transactions across different time periods.',
       budgetSuggestions: ['Consider budgeting based on your top categories', 'Set weekly spending limits', 'Plan for large purchases']
     };
   }
@@ -534,8 +554,15 @@ Focus on:
     const topCategory = Object.entries(metrics.categoryBreakdown)
       .sort(([,a], [,b]) => (b as number) - (a as number))[0];
 
+    // Clean summary without JSON formatting
+    const categorySummary = topCategory ? 
+      `${topCategory[0] as string} is your primary spending category at ₹${(topCategory[1] as number).toFixed(2)}.` : 
+      'Multiple categories are being tracked for detailed analysis.';
+    
+    const cleanSummary = `Your comprehensive spending analysis shows ₹${metrics.totalSpent.toFixed(2)} across ${metrics.totalTransactions} transactions. ${categorySummary} ${spendingInsights.spendingPattern} detected with highest activity on ${spendingInsights.topSpendingDay}.`;
+
     return {
-      summary: `Your comprehensive spending analysis shows ₹${metrics.totalSpent.toFixed(2)} across ${metrics.totalTransactions} transactions. ${topCategory ? `${topCategory[0] as string} is your primary spending category (₹${(topCategory[1] as number).toFixed(2)}).` : ''} ${spendingInsights.spendingPattern} detected with highest activity on ${spendingInsights.topSpendingDay}.`,
+      summary: cleanSummary,
       recommendations: [
         `💰 Average transaction: ₹${metrics.avgTransactionAmount.toFixed(2)} - evaluate if this aligns with your financial goals`,
         `📊 ${Object.keys(metrics.categoryBreakdown).length} categories tracked - excellent for detailed financial analysis`,
@@ -544,9 +571,9 @@ Focus on:
         `🔍 ${spendingInsights.savingsOpportunity}`,
         `📅 ${spendingInsights.topSpendingDay} is your peak spending day - plan accordingly`
       ],
-      spendingTrends: `Your spending shows ${spendingInsights.spendingPattern} with peak activity on ${spendingInsights.topSpendingDay}. Most significant purchase was ${spendingInsights.mostExpensiveTransaction.title} (₹${spendingInsights.mostExpensiveTransaction.amount}). ${topCategory ? `${topCategory[0] as string} dominates your spending at ${(((topCategory[1] as number) / metrics.totalSpent) * 100).toFixed(1)}% of total expenses.` : ''} Time-based analysis reveals patterns for optimization.`,
+      spendingTrends: `Your spending shows ${spendingInsights.spendingPattern} with peak activity on ${spendingInsights.topSpendingDay}. Most significant purchase was ${spendingInsights.mostExpensiveTransaction.title} for ₹${spendingInsights.mostExpensiveTransaction.amount}. ${topCategory ? `${topCategory[0] as string} dominates your spending at ${(((topCategory[1] as number) / metrics.totalSpent) * 100).toFixed(1)}% of total expenses.` : 'Categories are well distributed across your expenses.'} Time-based analysis reveals patterns for optimization.`,
       budgetSuggestions: Object.keys(metrics.categoryBreakdown).length > 0 ? [
-        `💡 Suggested monthly budgets: ${Object.entries(metrics.categoryBreakdown).map(([cat, amt]) => `${cat}: ₹${Math.ceil((amt as number) * 1.15)}`).join(', ')}`,
+        `💡 Suggested monthly budgets based on your spending patterns`,
         '⏰ Set weekly check-ins to monitor budget progress',
         '🚨 Configure alerts at 75% of category limits',
         '📈 Review and adjust budgets quarterly based on spending trends',
