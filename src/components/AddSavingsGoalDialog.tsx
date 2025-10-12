@@ -50,6 +50,87 @@ export const AddSavingsGoalDialog: React.FC<AddSavingsGoalDialogProps> = ({
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
+
+  // Real-time validation function
+  const validateField = (field: string, value: string) => {
+    const errors = { ...validationErrors };
+    
+    switch (field) {
+      case 'targetAmount':
+        const targetValue = parseFloat(value);
+        if (value && (isNaN(targetValue) || targetValue <= 0)) {
+          errors.targetAmount = 'Must be a valid number greater than 0';
+        } else if (value && targetValue < 100) {
+          errors.targetAmount = 'Must be at least ₹100';
+        } else if (value && targetValue > 10000000) {
+          errors.targetAmount = 'Cannot exceed ₹1,00,00,000';
+        } else {
+          delete errors.targetAmount;
+        }
+        break;
+        
+      case 'currentAmount':
+        const currentValue = parseFloat(value);
+        const targetValue2 = parseFloat(targetAmount);
+        if (value && (isNaN(currentValue) || currentValue < 0)) {
+          errors.currentAmount = 'Must be a valid number (0 or greater)';
+        } else if (value && targetAmount && currentValue > targetValue2) {
+          errors.currentAmount = 'Cannot exceed target amount';
+        } else {
+          delete errors.currentAmount;
+        }
+        break;
+        
+      case 'addAmount':
+        const addValue = parseFloat(value);
+        if (value && (isNaN(addValue) || addValue <= 0)) {
+          errors.addAmount = 'Must be a valid number greater than 0';
+        } else if (value && addValue > 1000000) {
+          errors.addAmount = 'Consider adding smaller amounts';
+        } else {
+          delete errors.addAmount;
+        }
+        break;
+        
+      case 'name':
+        if (value && value.length > 50) {
+          errors.name = 'Goal name too long (max 50 characters)';
+        } else if (value && value.length < 3) {
+          errors.name = 'Goal name too short (min 3 characters)';
+        } else {
+          delete errors.name;
+        }
+        break;
+    }
+    
+    setValidationErrors(errors);
+  };
+
+  // Enhanced setters with validation
+  const setTargetAmountWithValidation = (value: string) => {
+    // Only allow numbers and decimal point
+    const cleanValue = value.replace(/[^0-9.]/g, '');
+    setTargetAmount(cleanValue);
+    validateField('targetAmount', cleanValue);
+  };
+
+  const setCurrentAmountWithValidation = (value: string) => {
+    const cleanValue = value.replace(/[^0-9.]/g, '');
+    setCurrentAmount(cleanValue);
+    validateField('currentAmount', cleanValue);
+  };
+
+  const setAddAmountWithValidation = (value: string) => {
+    const cleanValue = value.replace(/[^0-9.]/g, '');
+    setAddAmount(cleanValue);
+    validateField('addAmount', cleanValue);
+  };
+
+  const setNameWithValidation = (value: string) => {
+    setName(value);
+    validateField('name', value);
+  };
 
   const styles = getStyles(isDarkTheme);
 
@@ -78,20 +159,83 @@ export const AddSavingsGoalDialog: React.FC<AddSavingsGoalDialogProps> = ({
     }
   }, [editingGoal, visible]);
 
-  // Handle adding amount to current amount
+  // Handle adding amount to current amount with enhanced validation
   const handleAddAmount = () => {
     const currentAmountValue = parseFloat(currentAmount) || 0;
     const addAmountValue = parseFloat(addAmount) || 0;
+    const targetAmountValue = parseFloat(targetAmount) || 0;
     
-    if (addAmountValue <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount to add');
+    // Basic validation
+    if (isNaN(addAmountValue) || addAmountValue <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid amount greater than 0 to add');
+      return;
+    }
+
+    // Check if adding this amount would exceed the target
+    const newTotal = currentAmountValue + addAmountValue;
+    
+    if (targetAmountValue > 0 && newTotal > targetAmountValue) {
+      Alert.alert(
+        'Amount Exceeds Target',
+        `Adding ₹${addAmountValue.toLocaleString('en-IN')} would make your total ₹${newTotal.toLocaleString('en-IN')}, which exceeds your target of ₹${targetAmountValue.toLocaleString('en-IN')}.\n\nWould you like to continue anyway?`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Continue',
+            onPress: () => {
+              setCurrentAmount(newTotal.toString());
+              setAddAmount('');
+              Alert.alert('Success', `₹${addAmountValue.toLocaleString('en-IN')} added! Your goal is now ${Math.round((newTotal / targetAmountValue) * 100)}% complete.`);
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    // Reasonable single addition limit (₹10 lakh)
+    if (addAmountValue > 1000000) {
+      Alert.alert(
+        'Large Amount',
+        `You're adding ₹${addAmountValue.toLocaleString('en-IN')} at once. Are you sure this is correct?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Confirm',
+            onPress: () => {
+              setCurrentAmount(newTotal.toString());
+              setAddAmount('');
+              
+              // Show completion message if goal is reached
+              if (targetAmountValue > 0 && newTotal >= targetAmountValue) {
+                Alert.alert('🎉 Goal Completed!', `Congratulations! You've reached your savings goal of ₹${targetAmountValue.toLocaleString('en-IN')}!`);
+              } else {
+                Alert.alert('Success', `₹${addAmountValue.toLocaleString('en-IN')} added successfully!`);
+              }
+            }
+          }
+        ]
+      );
       return;
     }
     
-    const newTotal = currentAmountValue + addAmountValue;
+    // Normal addition
     setCurrentAmount(newTotal.toString());
     setAddAmount('');
-    Alert.alert('Success', `₹${addAmountValue} added to current savings!`);
+    
+    // Show completion message if goal is reached
+    if (targetAmountValue > 0 && newTotal >= targetAmountValue) {
+      Alert.alert('🎉 Goal Completed!', `Congratulations! You've reached your savings goal of ₹${targetAmountValue.toLocaleString('en-IN')}!`);
+    } else {
+      const progressPercent = targetAmountValue > 0 ? Math.round((newTotal / targetAmountValue) * 100) : 0;
+      Alert.alert(
+        'Success', 
+        `₹${addAmountValue.toLocaleString('en-IN')} added successfully!${targetAmountValue > 0 ? ` You're now ${progressPercent}% towards your goal.` : ''}`
+      );
+    }
   };
 
   // Handle date picker change
@@ -128,17 +272,50 @@ export const AddSavingsGoalDialog: React.FC<AddSavingsGoalDialogProps> = ({
       return;
     }
 
-    // Validate target amount
+    // Enhanced validation for target amount
     const targetAmountValue = parseFloat(targetAmount);
-    if (targetAmountValue <= 0) {
-      Alert.alert('Invalid Amount', 'Target amount must be greater than 0');
+    if (isNaN(targetAmountValue) || targetAmountValue <= 0) {
+      Alert.alert('Invalid Amount', 'Target amount must be a valid number greater than 0');
       return;
     }
 
-    // Validate current amount
+    // Set reasonable limits for goal amounts
+    if (targetAmountValue < 100) {
+      Alert.alert('Invalid Amount', 'Target amount must be at least ₹100');
+      return;
+    }
+
+    if (targetAmountValue > 10000000) { // 1 crore limit
+      Alert.alert('Invalid Amount', 'Target amount cannot exceed ₹1,00,00,000 (1 Crore)');
+      return;
+    }
+
+    // Enhanced validation for current amount
     const currentAmountValue = parseFloat(currentAmount);
-    if (currentAmountValue < 0) {
-      Alert.alert('Invalid Amount', 'Current amount cannot be negative');
+    if (isNaN(currentAmountValue) || currentAmountValue < 0) {
+      Alert.alert('Invalid Amount', 'Current amount must be a valid number and cannot be negative');
+      return;
+    }
+
+    // Critical validation: Current amount cannot exceed target amount
+    if (currentAmountValue > targetAmountValue) {
+      Alert.alert(
+        'Invalid Amount', 
+        `Current amount (₹${currentAmountValue.toLocaleString('en-IN')}) cannot be greater than target amount (₹${targetAmountValue.toLocaleString('en-IN')}). Please adjust your amounts.`
+      );
+      return;
+    }
+
+    // Warn if current amount is very close to target (95% or more)
+    if (currentAmountValue >= targetAmountValue * 0.95) {
+      Alert.alert(
+        'Goal Almost Complete',
+        `Your current amount is already ${Math.round((currentAmountValue / targetAmountValue) * 100)}% of your target. Consider increasing your target amount or marking this goal as complete.`,
+        [
+          { text: 'Continue Anyway', onPress: () => proceedWithSave() },
+          { text: 'Adjust Amount', style: 'cancel' }
+        ]
+      );
       return;
     }
 
@@ -152,8 +329,49 @@ export const AddSavingsGoalDialog: React.FC<AddSavingsGoalDialogProps> = ({
       return;
     }
 
+    // Warn if target date is too far in the future (more than 10 years)
+    const maxDate = new Date();
+    maxDate.setFullYear(maxDate.getFullYear() + 10);
+    
+    if (goalDate > maxDate) {
+      Alert.alert(
+        'Long Term Goal',
+        'Target date is more than 10 years away. Consider setting shorter term milestones.',
+        [
+          { text: 'Continue Anyway', onPress: () => proceedWithSave() },
+          { text: 'Adjust Date', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
+    // Validate monthly saving requirement
+    const monthsToGoal = Math.ceil((goalDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30));
+    const remainingAmount = targetAmountValue - currentAmountValue;
+    const monthlyRequired = remainingAmount / monthsToGoal;
+
+    if (monthlyRequired > 100000) { // More than 1 lakh per month
+      Alert.alert(
+        'High Monthly Requirement',
+        `You need to save ₹${monthlyRequired.toLocaleString('en-IN')} per month to reach this goal. This seems quite high. Consider adjusting your target amount or extending the timeline.`,
+        [
+          { text: 'Continue Anyway', onPress: () => proceedWithSave() },
+          { text: 'Adjust Goal', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
+    await proceedWithSave();
+  };
+
+  const proceedWithSave = async () => {
     setLoading(true);
     try {
+      const targetAmountValue = parseFloat(targetAmount);
+      const currentAmountValue = parseFloat(currentAmount);
+      const goalDate = new Date(targetDate);
+
       const goalData = {
         name,
         targetAmount: targetAmountValue,
@@ -272,28 +490,46 @@ export const AddSavingsGoalDialog: React.FC<AddSavingsGoalDialogProps> = ({
               <View style={styles.section}>
                 <Text style={styles.label}>Goal Name *</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[
+                    styles.input,
+                    validationErrors.name && styles.inputError
+                  ]}
                   value={name}
-                  onChangeText={setName}
+                  onChangeText={setNameWithValidation}
                   placeholder="e.g., New iPhone, Europe Trip"
                   placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
+                  maxLength={50}
                 />
+                {validationErrors.name && (
+                  <Text style={styles.errorText}>{validationErrors.name}</Text>
+                )}
               </View>
 
               {/* Target Amount */}
               <View style={styles.section}>
                 <Text style={styles.label}>Target Amount *</Text>
-                <View style={styles.inputContainer}>
+                <View style={[
+                  styles.inputContainer,
+                  validationErrors.targetAmount && styles.inputError
+                ]}>
                   <Text style={styles.currencySymbol}>₹</Text>
                   <TextInput
                     style={styles.amountInput}
                     value={targetAmount}
-                    onChangeText={setTargetAmount}
+                    onChangeText={setTargetAmountWithValidation}
                     keyboardType="numeric"
                     placeholder="Enter target amount"
                     placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
                   />
                 </View>
+                {validationErrors.targetAmount && (
+                  <Text style={styles.errorText}>{validationErrors.targetAmount}</Text>
+                )}
+                {targetAmount && !validationErrors.targetAmount && (
+                  <Text style={styles.helpText}>
+                    Target: ₹{parseFloat(targetAmount).toLocaleString('en-IN')}
+                  </Text>
+                )}
               </View>
 
               {/* Current Amount */}
@@ -302,17 +538,23 @@ export const AddSavingsGoalDialog: React.FC<AddSavingsGoalDialogProps> = ({
                 entering={FadeInUp.delay(600)}
               >
                 <Text style={styles.label}>Current Amount</Text>
-                <View style={styles.inputContainer}>
+                <View style={[
+                  styles.inputContainer,
+                  validationErrors.currentAmount && styles.inputError
+                ]}>
                   <Text style={styles.currencySymbol}>₹</Text>
                   <TextInput
                     style={styles.amountInput}
                     value={currentAmount}
-                    onChangeText={setCurrentAmount}
+                    onChangeText={setCurrentAmountWithValidation}
                     keyboardType="numeric"
                     placeholder="Current savings amount"
                     placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
                   />
                 </View>
+                {validationErrors.currentAmount && (
+                  <Text style={styles.errorText}>{validationErrors.currentAmount}</Text>
+                )}
                 
                 {/* Add Amount Section - Always show for convenience */}
                 <View style={styles.addAmountSection}>
@@ -320,12 +562,16 @@ export const AddSavingsGoalDialog: React.FC<AddSavingsGoalDialogProps> = ({
                     {editingGoal ? 'Add more savings:' : 'Quick add to current amount:'}
                   </Text>
                   <View style={styles.addAmountContainer}>
-                    <View style={[styles.inputContainer, { flex: 1 }]}>
+                    <View style={[
+                      styles.inputContainer, 
+                      { flex: 1 },
+                      validationErrors.addAmount && styles.inputError
+                    ]}>
                       <Text style={styles.currencySymbol}>+₹</Text>
                       <TextInput
                         style={styles.amountInput}
                         value={addAmount}
-                        onChangeText={setAddAmount}
+                        onChangeText={setAddAmountWithValidation}
                         keyboardType="numeric"
                         placeholder="Amount to add"
                         placeholderTextColor={isDarkTheme ? '#64748B' : '#94A3B8'}
@@ -334,15 +580,18 @@ export const AddSavingsGoalDialog: React.FC<AddSavingsGoalDialogProps> = ({
                     <TouchableOpacity
                       style={[
                         styles.addButton,
-                        (!addAmount || parseFloat(addAmount) <= 0) && styles.addButtonDisabled
+                        (!addAmount || parseFloat(addAmount) <= 0 || validationErrors.addAmount) && styles.addButtonDisabled
                       ]}
                       onPress={handleAddAmount}
-                      disabled={!addAmount || parseFloat(addAmount) <= 0}
+                      disabled={!addAmount || parseFloat(addAmount) <= 0 || !!validationErrors.addAmount}
                     >
                       <Ionicons name="add" size={20} color="#fff" />
                       <Text style={styles.addButtonText}>Add</Text>
                     </TouchableOpacity>
                   </View>
+                  {validationErrors.addAmount && (
+                    <Text style={styles.errorText}>{validationErrors.addAmount}</Text>
+                  )}
                   <Text style={styles.addAmountHint}>
                     This will be added to your current amount above
                   </Text>
@@ -744,5 +993,21 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: isDark ? '#64748B' : '#94A3B8',
+  },
+  inputError: {
+    borderColor: '#EF4444',
+    borderWidth: 2,
+  },
+  errorText: {
+    fontSize: 12,
+    color: '#EF4444',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  helpText: {
+    fontSize: 12,
+    color: isDark ? '#94A3B8' : '#64748B',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
 });
