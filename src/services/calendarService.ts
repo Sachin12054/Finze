@@ -29,6 +29,7 @@ export interface CalendarMonth {
   days: CalendarDay[];
   totalExpenses: number;
   totalIncome: number;
+  netAmount: number;
   totalTransactions: number;
   previousMonth: {
     year: number;
@@ -53,17 +54,17 @@ class CalendarServiceClass {
         throw new Error('User not authenticated');
       }
 
-      // Get all expenses for the user
-      const allExpenses = await getAllExpenses(userId);
+      // Get all transactions (expenses and income) for the user
+      const allTransactions = await getAllExpenses(userId);
       
-      // Filter expenses for the specific month
-      const monthExpenses = allExpenses.filter(expense => {
-        const expenseDate = new Date(expense.date);
-        return expenseDate.getFullYear() === year && expenseDate.getMonth() === month;
+      // Filter transactions for the specific month (both expenses and income)
+      const monthTransactions = allTransactions.filter((transaction: any) => {
+        const transactionDate = new Date(transaction.date);
+        return transactionDate.getFullYear() === year && transactionDate.getMonth() === month;
       });
 
       // Generate calendar structure
-      const calendarData = this.generateCalendarMonth(year, month, monthExpenses);
+      const calendarData = this.generateCalendarMonth(year, month, monthTransactions);
       
       console.log(`✅ Calendar loaded: ${calendarData.days.length} days, ${calendarData.totalTransactions} transactions`);
       return calendarData;
@@ -73,7 +74,7 @@ class CalendarServiceClass {
     }
   }
 
-  private generateCalendarMonth(year: number, month: number, expenses: Expense[]): CalendarMonth {
+  private generateCalendarMonth(year: number, month: number, transactions: Expense[]): CalendarMonth {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const today = new Date();
@@ -89,28 +90,35 @@ class CalendarServiceClass {
     const days: CalendarDay[] = [];
     const currentDate = new Date(startDate);
     
-    // Group expenses by date
-    const expensesByDate = this.groupExpensesByDate(expenses);
+    // Group transactions by date
+    const transactionsByDate = this.groupExpensesByDate(transactions);
     
     while (currentDate <= endDate) {
       const dateStr = currentDate.toISOString().split('T')[0];
-      const dayExpenses = expensesByDate[dateStr] || [];
+      const dayTransactions = transactionsByDate[dateStr] || [];
       
       const isCurrentMonth = currentDate.getMonth() === month;
       const isToday = this.isSameDate(currentDate, today);
       
-      // Convert expenses to calendar events
-      const events: CalendarEvent[] = dayExpenses.map(expense => ({
-        id: expense.id,
-        title: expense.title || expense.description || 'Transaction',
-        amount: expense.amount,
-        category: expense.category || expense.type || 'Other',
-        time: this.formatTime(expense.date),
-        type: 'expense' as const,
-        description: expense.description
+      // Convert transactions to calendar events and separate income/expenses
+      const events: CalendarEvent[] = dayTransactions.map((transaction: any) => ({
+        id: transaction.id,
+        title: transaction.title || transaction.description || 'Transaction',
+        amount: transaction.amount,
+        category: transaction.category || transaction.type || 'Other',
+        time: this.formatTime(transaction.date),
+        type: (transaction.type === 'income' ? 'income' : 'expense') as 'income' | 'expense',
+        description: transaction.description
       }));
 
-      const totalExpenses = dayExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+      // Calculate totals for expenses and income separately
+      const totalExpenses = dayTransactions
+        .filter((t: any) => t.type !== 'income')
+        .reduce((sum: number, exp: any) => sum + (exp.amount || 0), 0);
+      
+      const totalIncome = dayTransactions
+        .filter((t: any) => t.type === 'income')
+        .reduce((sum: number, inc: any) => sum + (inc.amount || 0), 0);
 
       days.push({
         date: dateStr,
@@ -118,7 +126,7 @@ class CalendarServiceClass {
         isCurrentMonth,
         isToday,
         totalExpenses,
-        totalIncome: 0, // For now, we're only handling expenses
+        totalIncome,
         events,
         weekday: currentDate.toLocaleDateString('en-US', { weekday: 'short' })
       });
@@ -131,6 +139,10 @@ class CalendarServiceClass {
       .filter(day => day.isCurrentMonth)
       .reduce((sum, day) => sum + day.totalExpenses, 0);
     
+    const monthlyIncome = days
+      .filter(day => day.isCurrentMonth)
+      .reduce((sum, day) => sum + day.totalIncome, 0);
+    
     const monthlyTransactions = days
       .filter(day => day.isCurrentMonth)
       .reduce((sum, day) => sum + day.events.length, 0);
@@ -141,7 +153,8 @@ class CalendarServiceClass {
       monthName: new Date(year, month).toLocaleDateString('en-US', { month: 'long' }),
       days,
       totalExpenses: monthlyExpenses,
-      totalIncome: 0,
+      totalIncome: monthlyIncome,
+      netAmount: monthlyIncome - monthlyExpenses, // Net amount (income - expenses)
       totalTransactions: monthlyTransactions,
       previousMonth: {
         year: month === 0 ? year - 1 : year,

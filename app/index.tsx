@@ -1,31 +1,26 @@
 import { useRouter } from 'expo-router';
-import { onAuthStateChanged } from 'firebase/auth';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { auth } from '../src/services/firebase/firebase';
+import { useAuth } from '../src/contexts/AuthContext';
 import '../src/utils/consoleSuppressions'; // Suppress warnings early
 
 export default function Index() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { user, isLoading } = useAuth();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user);
-      setIsLoading(false);
-      
+    if (!isLoading) {
       if (user) {
         // User is logged in, redirect to tabs
+        console.log('User authenticated, navigating to tabs');
         router.replace('/(tabs)');
       } else {
         // User is not logged in, redirect to loading screen
+        console.log('User not authenticated, navigating to auth');
         router.replace('/auth/loading' as any);
       }
-    });
-
-    return () => unsubscribe();
-  }, [router]);
+    }
+  }, [user, isLoading, router]);
 
   // Show loading spinner while checking auth state
   return (

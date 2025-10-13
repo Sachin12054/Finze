@@ -184,22 +184,21 @@ export async function getAllExpenses(userId: string, timePeriod?: TimePeriod): P
       manualSnapshot.forEach(doc => {
         const data = doc.data();
         console.log(`📝 Manual transaction: ${doc.id}, type: ${data.type}, amount: ${data.amount}`);
-        // Only include expenses, exclude income transactions
-        const isExpense = data.type === 'expense' || !data.type; // Default to expense if type is missing
+        // Include both expenses and income transactions
         const expenseDate = data.date || data.created_at;
         const isInDateRange = isDateInRange(expenseDate, dateRange);
         
-        if (isExpense && data.amount !== undefined && isInDateRange) {
+        if (data.amount !== undefined && isInDateRange) {
           allExpenses.push({
             id: doc.id,
             ...data,
             amount: parseFloat(data.amount) || 0,
-            type: 'manual',
+            type: data.type || 'expense', // Keep the original type (income/expense)
             date: data.date || data.created_at?.toDate?.() || new Date()
           } as Expense);
-          console.log(`✅ Added manual expense: ${doc.id} - ₹${data.amount}`);
+          console.log(`✅ Added transaction: ${doc.id} - ₹${data.amount} (${data.type || 'expense'})`);
         } else {
-          console.log(`❌ Filtered out: ${doc.id} - type: ${data.type}, amount: ${data.amount}`);
+          console.log(`❌ Filtered out: ${doc.id} - amount: ${data.amount}`);
         }
       });
     } catch (error) {

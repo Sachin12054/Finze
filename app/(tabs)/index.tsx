@@ -820,7 +820,7 @@ export default function HomeScreen() {
       />
 
       <CalendarComponent
-        visible={showCalendar}
+        isVisible={showCalendar}
         onClose={() => setShowCalendar(false)}
         refreshTrigger={refreshKey}
       />

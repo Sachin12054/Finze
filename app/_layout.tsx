@@ -7,6 +7,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import 'react-native-get-random-values';
 import 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
+import { AuthProvider } from '../src/contexts/AuthContext';
 import { ThemeProvider as CustomThemeProvider } from '../src/contexts/ThemeContext';
 import { setupGlobalAsyncErrorHandling } from '../src/utils/asyncErrorHandler';
 import '../src/utils/consoleSuppressions'; // Import warning suppressions
@@ -58,34 +59,38 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
-  // Always wrap in CustomThemeProvider, even during loading
+  // Always wrap in providers, even during loading
   if (!loaded || !isReady) {
     return (
-      <CustomThemeProvider>
-        <LoadingScreen />
-      </CustomThemeProvider>
+      <AuthProvider>
+        <CustomThemeProvider>
+          <LoadingScreen />
+        </CustomThemeProvider>
+      </AuthProvider>
     );
   }
 
   return (
-    <CustomThemeProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/loading" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/welcome" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/login" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/signup" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/forgot-password" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/verification" options={{ headerShown: false }} />
-          <Stack.Screen name="auth/new-password" options={{ headerShown: false }} />
-          <Stack.Screen name="Profile" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
-        </Stack>
-        <StatusBar style="auto" />
-        <Toast />
-      </ThemeProvider>
-    </CustomThemeProvider>
+    <AuthProvider>
+      <CustomThemeProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/loading" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/welcome" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/login" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/signup" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/forgot-password" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/verification" options={{ headerShown: false }} />
+            <Stack.Screen name="auth/new-password" options={{ headerShown: false }} />
+            <Stack.Screen name="Profile" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+          <StatusBar style="auto" />
+          <Toast />
+        </ThemeProvider>
+      </CustomThemeProvider>
+    </AuthProvider>
   );
 }

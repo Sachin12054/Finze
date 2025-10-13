@@ -32,6 +32,7 @@ import Animated, {
     withSequence,
     withSpring
 } from "react-native-reanimated";
+import { useAuth } from "../src/contexts/AuthContext";
 import { databaseService } from "../src/services/databaseService";
 import { auth } from "../src/services/firebase/firebase";
 import { deleteProfileImage, generatePlaceholderAvatar, UploadProgress } from "../src/services/imageUploadService";
@@ -58,9 +59,10 @@ const { width, height } = Dimensions.get('window');
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [fullName, setFullName] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState(auth.currentUser?.email || "");
+  const [email, setEmail] = useState(user?.email || "");
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
   const [location, setLocation] = useState("");
@@ -69,7 +71,7 @@ export default function ProfileScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [privateAccount, setPrivateAccount] = useState(false);
   const [profilePic, setProfilePic] = useState(
-    generatePlaceholderAvatar(auth.currentUser?.uid || '', auth.currentUser?.displayName || '')
+    generatePlaceholderAvatar(user?.uid || '', user?.displayName || '')
   );
   const [isLoading, setIsLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -81,7 +83,7 @@ export default function ProfileScreen() {
   const buttonScale = useSharedValue(1);
   const headerHeight = useSharedValue(0);
 
-  const uid = auth.currentUser?.uid;
+  const uid = user?.uid;
 
   // Animated styles
   const profileAnimatedStyle = useAnimatedStyle(() => {
@@ -125,7 +127,7 @@ export default function ProfileScreen() {
         if (userDoc) {
           const data = userDoc;
           setFullName(data.fullName || "");
-          setDisplayName(data.displayName || auth.currentUser?.displayName || "User");
+          setDisplayName(data.displayName || user?.displayName || "User");
           setPhone(data.phone || "");
           setBio(""); // bio not in new schema
           setLocation(""); // location not in new schema
@@ -136,9 +138,9 @@ export default function ProfileScreen() {
           if (data.avatar_url) setProfilePic(data.avatar_url);
         } else {
           console.log("No user document found, initializing with defaults");
-          const defaultName = auth.currentUser?.displayName || "User";
+          const defaultName = user?.displayName || "User";
           await databaseService.createUser({
-            email: auth.currentUser?.email || "",
+            email: user?.email || "",
             displayName: defaultName,
             fullName: defaultName,
             avatar_url: profilePic,
