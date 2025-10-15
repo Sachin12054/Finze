@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Modal from 'react-native-modal';
-import { LegacyExpense } from '../services/legacyAdapterService';
+import { Transaction } from '../services/firebase/enhancedFirebaseService';
 import { aiCategorizationService, ExpenseForCategorization } from '../services/ml/aiCategorizationService';
 
 interface SmartSuggestionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  expenses: LegacyExpense[];
+  expenses: Transaction[];
 }
 
 interface AISuggestion {
@@ -67,7 +67,12 @@ export const SmartSuggestionDialog: React.FC<SmartSuggestionDialogProps> = ({
   const generateBaseSuggestions = (): AISuggestion[] => {
     const totalExpenses = expenses
       .filter(e => e.type === 'expense')
-      .reduce((sum, e) => sum + e.amount, 0);
+      .reduce((sum, e) => {
+        const amount = typeof e.amount === 'number' && !isNaN(e.amount) 
+          ? e.amount 
+          : 0;
+        return sum + amount;
+      }, 0);
     
     const avgMonthlyExpense = totalExpenses / Math.max(1, expenses.length);
     

@@ -127,8 +127,18 @@ export const CalendarComponent: React.FC<CalendarComponentProps> = ({
     }
 
     const currentMonthDays = calendarData.days.filter(day => day.isCurrentMonth);
-    const totalExpenses = currentMonthDays.reduce((sum, day) => sum + day.totalExpenses, 0);
-    const totalIncome = currentMonthDays.reduce((sum, day) => sum + day.totalIncome, 0);
+    const totalExpenses = currentMonthDays.reduce((sum, day) => {
+      const amount = typeof day.totalExpenses === 'number' && !isNaN(day.totalExpenses) 
+        ? day.totalExpenses 
+        : 0;
+      return sum + amount;
+    }, 0);
+    const totalIncome = currentMonthDays.reduce((sum, day) => {
+      const amount = typeof day.totalIncome === 'number' && !isNaN(day.totalIncome) 
+        ? day.totalIncome 
+        : 0;
+      return sum + amount;
+    }, 0);
     const transactionCount = currentMonthDays.reduce((sum, day) => sum + day.events.length, 0);
     
     const daysWithExpenses = currentMonthDays.filter(day => day.totalExpenses > 0);

@@ -361,19 +361,29 @@ export class EnhancedFirebaseService {
         .map(doc => {
           const data = doc.data();
           console.log('Processing manual transaction:', doc.id, data);
+          
+          // Ensure amount is a valid number
+          let validAmount = 0;
+          if (typeof data.amount === 'number' && !isNaN(data.amount)) {
+            validAmount = data.amount;
+          } else if (typeof data.amount === 'string') {
+            const parsed = parseFloat(data.amount);
+            validAmount = isNaN(parsed) ? 0 : parsed;
+          }
+          
           return {
             id: doc.id,
-            userId: data.user_id,
-            title: data.title,
-            amount: data.amount,
-            category: data.category,
+            userId: data.user_id || '',
+            title: data.title || 'Untitled Transaction',
+            amount: validAmount,
+            category: data.category || 'Other',
             type: data.type || 'expense', // Default to expense if type is missing
             source: data.source || 'Manual',
-            description: data.description,
-            date: data.date,
-            paymentMethod: data.payment_method,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
+            description: data.description || '',
+            date: data.date || new Date().toISOString().split('T')[0],
+            paymentMethod: data.payment_method || 'Cash',
+            createdAt: data.created_at || new Date().toISOString(),
+            updatedAt: data.updated_at || new Date().toISOString(),
           };
         }) as Transaction[];
       
@@ -419,19 +429,55 @@ export class EnhancedFirebaseService {
           cleanTitle = 'Receipt Transaction';
         }
         
+        // Get amount with multiple fallback options and strict type checking
+        // Try: totalAmount, total_amount, amount, subtotalAmount, subtotal_amount
+        let amount: number = 0;
+        
+        // Try each field and ensure it's a valid number
+        if (typeof data.totalAmount === 'number' && !isNaN(data.totalAmount)) {
+          amount = data.totalAmount;
+        } else if (typeof data.total_amount === 'number' && !isNaN(data.total_amount)) {
+          amount = data.total_amount;
+        } else if (typeof data.amount === 'number' && !isNaN(data.amount)) {
+          amount = data.amount;
+        } else if (typeof data.subtotalAmount === 'number' && !isNaN(data.subtotalAmount)) {
+          amount = data.subtotalAmount;
+        } else if (typeof data.subtotal_amount === 'number' && !isNaN(data.subtotal_amount)) {
+          amount = data.subtotal_amount;
+        }
+        
+        // ALWAYS log scanner expense processing to verify code is running
+        console.log('🔍 [NEW CODE] Processing scanner expense:', {
+          id: doc.id,
+          category: data.category,
+          extractedAmount: amount,
+          totalAmount: data.totalAmount,
+          total_amount: data.total_amount,
+          amount: data.amount,
+          subtotalAmount: data.subtotalAmount,
+          subtotal_amount: data.subtotal_amount,
+          allFields: Object.keys(data)
+        });
+        
+        // Log if amount is 0 to help debug
+        if (amount === 0 || isNaN(amount)) {
+          console.warn('⚠️ Scanner expense has invalid amount - PLEASE FIX DATABASE!', doc.id);
+        }
+        
+        // Ensure all transaction fields have valid values (no undefined/null)
         const transaction = {
           id: `scanner_${doc.id}`,
-          userId: data.userId,
+          userId: data.userId || '',
           title: cleanTitle,
-          amount: data.totalAmount,
+          amount: Number(amount) || 0, // Ensure it's a number
           category: data.category || 'General',
           type: 'expense' as 'expense',
           source: 'OCR' as 'OCR',
           description: `Scanned receipt transaction`,
-          date: data.createdAt ? data.createdAt.split('T')[0] : new Date().toISOString().split('T')[0], // Use scan date for UI display
+          date: data.createdAt ? data.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
           paymentMethod: 'Unknown',
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
+          createdAt: data.createdAt || new Date().toISOString(),
+          updatedAt: data.updatedAt || new Date().toISOString(),
         };
         
         // Only log conversion details on first load
@@ -748,11 +794,15 @@ export class EnhancedFirebaseService {
     let totalExpenses = 0;
     
     transactions.forEach(transaction => {
+      const amount = typeof transaction.amount === 'number' && !isNaN(transaction.amount) 
+        ? transaction.amount 
+        : 0;
+        
       if (transaction.type === 'income') {
-        totalIncome += transaction.amount;
+        totalIncome += amount;
       } else {
-        totalExpenses += transaction.amount;
-        categoryData[transaction.category] = (categoryData[transaction.category] || 0) + transaction.amount;
+        totalExpenses += amount;
+        categoryData[transaction.category] = (categoryData[transaction.category] || 0) + amount;
       }
     });
     

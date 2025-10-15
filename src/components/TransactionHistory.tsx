@@ -15,14 +15,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
-import { LegacyExpense } from "../services/legacyAdapterService";
+import { Transaction } from "../services/firebase/enhancedFirebaseService";
 
 interface TransactionHistoryProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  expenses: LegacyExpense[];
+  expenses: Transaction[];
   onDeleteExpense: (id: string) => void;
-  onEditExpense: (id: string, updatedExpense: Partial<LegacyExpense>) => void;
+  onEditExpense: (id: string, updatedExpense: Partial<Transaction>) => void;
 }
 
 const { width, height } = Dimensions.get('window');
@@ -124,7 +124,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [amountMax, setAmountMax] = useState('');
   const [sortBy, setSortBy] = useState<'date' | 'amount' | 'category'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [editExpense, setEditExpense] = useState<LegacyExpense | null>(null);
+  const [editExpense, setEditExpense] = useState<Transaction | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   // Animations
@@ -212,11 +212,21 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   // Calculate totals
   const totalIncome = filteredExpenses
     .filter(expense => expense.type === 'income')
-    .reduce((sum, expense) => sum + expense.amount, 0);
+    .reduce((sum, expense) => {
+      const amount = typeof expense.amount === 'number' && !isNaN(expense.amount) 
+        ? expense.amount 
+        : 0;
+      return sum + amount;
+    }, 0);
     
   const totalExpenses = filteredExpenses
     .filter(expense => expense.type === 'expense')
-    .reduce((sum, expense) => sum + expense.amount, 0);
+    .reduce((sum, expense) => {
+      const amount = typeof expense.amount === 'number' && !isNaN(expense.amount) 
+        ? expense.amount 
+        : 0;
+      return sum + amount;
+    }, 0);
     
   const netBalance = totalIncome - totalExpenses;
 
@@ -306,7 +316,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     setEditExpense(null);
   };
 
-  const handleDeleteExpense = (expense: LegacyExpense) => {
+  const handleDeleteExpense = (expense: Transaction) => {
     Alert.alert(
       "Delete Transaction",
       `Are you sure you want to delete "${expense.title || 'this transaction'}"?`,
@@ -315,7 +325,7 @@ const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         { 
           text: "Delete", 
           style: "destructive",
-          onPress: () => onDeleteExpense(expense.id)
+          onPress: () => expense.id && onDeleteExpense(expense.id)
         }
       ]
     );

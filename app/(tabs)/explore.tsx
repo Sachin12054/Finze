@@ -32,6 +32,8 @@ import { SavingsTab } from '../../src/components/tabs/SavingsTab';
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { AIInsightsData, aiInsightsService } from '../../src/services/aiInsightsService';
 import { auth, db } from '../../src/services/firebase/firebase';
+import BudgetMonitoringService from '../../src/services/budgetMonitoringService';
+import NotificationService from '../../src/services/notificationService';
 
 // Import Enhanced BudgetTab component
 import { BudgetTab } from '../../src/components/tabs/BudgetTab';
@@ -114,10 +116,30 @@ export default function ExploreDashboard() {
       }
       
       setupRealtimeListeners(currentUser.uid);
+      
+      // Request notification permissions
+      requestNotificationPermissions();
     });
 
     return unsubscribe;
   }, []);
+
+  // Request notification permissions
+  const requestNotificationPermissions = async () => {
+    try {
+      const { status } = await NotificationService.requestPermissionsAsync();
+      if (status === 'granted') {
+        console.log('✅ Notification permissions granted');
+        
+        // Schedule daily budget check
+        await NotificationService.scheduleDailyBudgetCheck();
+      } else {
+        console.log('❌ Notification permissions denied');
+      }
+    } catch (error) {
+      console.error('Error requesting notification permissions:', error);
+    }
+  };
 
   // Load AI insights
   const loadAIInsights = async () => {
@@ -163,22 +185,44 @@ export default function ExploreDashboard() {
         
         const totalIncome = monthlyTransactions
           .filter(transaction => transaction.type === 'income')
-          .reduce((sum, transaction) => sum + transaction.amount, 0);
+          .reduce((sum, transaction) => {
+            const amount = typeof transaction.amount === 'number' && !isNaN(transaction.amount) 
+              ? transaction.amount 
+              : 0;
+            return sum + amount;
+          }, 0);
         
         const totalExpenses = monthlyTransactions
           .filter(transaction => transaction.type === 'expense')
-          .reduce((sum, transaction) => sum + transaction.amount, 0);
+          .reduce((sum, transaction) => {
+            const amount = typeof transaction.amount === 'number' && !isNaN(transaction.amount) 
+              ? transaction.amount 
+              : 0;
+            return sum + amount;
+          }, 0);
         
         const balance = totalIncome - totalExpenses;
         
         setMonthlyIncome(totalIncome);
         setMonthlyExpenses(totalExpenses);
         setTotalBalance(balance);
+        
+        // Check budgets when transactions update
+        if (budgets.length > 0 && transactionData.length > 0) {
+          BudgetMonitoringService.checkBudgets(budgets, transactionData)
+            .catch(error => console.error('Error checking budgets on transaction update:', error));
+        }
       });
       unsubscribeFunctions.push(unsubscribeTransactions);
 
       const unsubscribeBudgets = EnhancedFirebaseService.getBudgetsListener((budgetData) => {
         setBudgets(budgetData);
+        
+        // Check budgets for alerts whenever budget or transaction data updates
+        if (budgetData.length > 0 && transactions.length > 0) {
+          BudgetMonitoringService.checkBudgets(budgetData, transactions)
+            .catch(error => console.error('Error checking budgets:', error));
+        }
       });
       unsubscribeFunctions.push(unsubscribeBudgets);
 
@@ -554,7 +598,12 @@ export default function ExploreDashboard() {
                         
                         return isMatch && isCurrentMonth && isExpense;
                       })
-                      .reduce((sum, exp) => sum + exp.amount, 0);
+                      .reduce((sum, exp) => {
+                        const amount = typeof exp.amount === 'number' && !isNaN(exp.amount) 
+                          ? exp.amount 
+                          : 0;
+                        return sum + amount;
+                      }, 0);
                     
                     const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
                     const isOverBudget = percentage > 100;

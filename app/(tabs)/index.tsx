@@ -2,43 +2,44 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from "expo-router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { doc, setDoc, Timestamp } from "firebase/firestore";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Dimensions,
-    Platform,
-    RefreshControl,
-    Animated as RNAnimated,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Dimensions,
+  Platform,
+  RefreshControl,
+  Animated as RNAnimated,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from "react-native";
 import Animated, {
-    FadeInDown,
-    FadeInUp,
-    SlideInRight,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
-    withTiming
+  FadeInDown,
+  FadeInUp,
+  SlideInRight,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming
 } from "react-native-reanimated";
 import Toast from 'react-native-toast-message';
 
 import { useTheme } from '../../src/contexts/ThemeContext';
 import { databaseService } from "../../src/services/databaseService";
 import {
-    Budget as EnhancedBudget,
-    EnhancedFirebaseService,
-    SavingsGoal as EnhancedSavingsGoal,
-    Transaction as EnhancedTransaction
+  Budget as EnhancedBudget,
+  EnhancedFirebaseService,
+  SavingsGoal as EnhancedSavingsGoal,
+  Transaction as EnhancedTransaction
 } from "../../src/services/firebase/enhancedFirebaseService";
-import { auth } from "../../src/services/firebase/firebase";
+import { auth, db } from "../../src/services/firebase/firebase";
 import {
-    AIInsight,
-    UserProfile
+  AIInsight,
+  UserProfile
 } from "../../src/types/database";
 
 // Import hooks
@@ -47,10 +48,11 @@ import { useToast } from '../../src/hooks/useToast';
 // Import components
 import AddExpenseDialog from '../../src/components/AddExpenseDialog';
 import { CalendarComponent } from '../../src/components/CalendarComponent';
+import { ChatBotDialog } from '../../src/components/ChatBotDialog';
 import { FirebaseStatusBanner } from '../../src/components/FirebaseStatusBanner';
+import { ProfessionalAIInsightsScreen } from '../../src/components/ProfessionalAIInsightsScreen';
 import { ProfileDialog } from '../../src/components/ProfileDialog';
 import ScannerDialog from '../../src/components/ScannerDialog';
-import { SimpleAIInsightsScreen } from '../../src/components/SimpleAIInsightsScreen';
 import { SmartSuggestionsComponent } from '../../src/components/SmartSuggestionsComponent';
 import TransactionHistory from '../../src/components/TransactionHistory';
 
@@ -130,6 +132,7 @@ export default function HomeScreen() {
   const [showAIInsights, setShowAIInsights] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [showProfileDialog, setShowProfileDialog] = useState(false);
+  const [showChatBot, setShowChatBot] = useState(false);
 
   // Debug: Log state changes
   useEffect(() => {
@@ -159,7 +162,12 @@ export default function HomeScreen() {
     return transactionDate.getMonth() === currentMonth && transactionDate.getFullYear() === currentYear;
   });
   const currentMonthExpenseAmount = financialSummary.currentMonthExpenses;
-  const totalBudgetAmount = budgets.reduce((sum, budget) => sum + budget.amount, 0);
+  const totalBudgetAmount = budgets.reduce((sum, budget) => {
+    const amount = typeof budget.amount === 'number' && !isNaN(budget.amount) 
+      ? budget.amount 
+      : 0;
+    return sum + amount;
+  }, 0);
   const budgetProgress = totalBudgetAmount > 0 ? (currentMonthExpenseAmount / totalBudgetAmount) * 100 : 0;
 
 
@@ -214,21 +222,25 @@ export default function HomeScreen() {
         try {
           const profile = await databaseService.getUserById(currentUser.uid);
           if (profile) {
-            setUserProfile(profile.profile);
+            setUserProfile(profile);
           } else {
             // Create default profile for new user
-            await databaseService.createUser({
+            const userRef = doc(db, 'users', currentUser.uid);
+            await setDoc(userRef, {
+              id: currentUser.uid,
               email: currentUser.email || "",
               displayName: currentUser.displayName || "User",
-              profile: {
-                totalBalance: 0,
-                monthlyIncome: 0,
-                monthlyExpenses: 0,
-                preferences: {}
-              }
+              preferences: {
+                theme: 'auto',
+                notifications: true,
+                currency: 'INR',
+                language: 'en'
+              },
+              created_at: Timestamp.now(),
+              updated_at: Timestamp.now()
             });
             const newProfile = await databaseService.getUserById(currentUser.uid);
-            setUserProfile(newProfile?.profile || {});
+            setUserProfile(newProfile || null);
           }
         } catch (profileError: any) {
           // Continue without profile data - user can set it up later
@@ -380,7 +392,7 @@ export default function HomeScreen() {
         ]);
 
         if (updatedProfile) {
-          setUserProfile(updatedProfile.profile);
+          setUserProfile(updatedProfile);
         }
 
         setFinancialSummary(updatedSummary);
@@ -659,16 +671,16 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={styles.essentialActionCard}
-              onPress={() => router.push('/Profile')}
-              accessibilityLabel="Profile settings"
+              onPress={() => setShowChatBot(true)}
+              accessibilityLabel="AI Chat Assistant"
               activeOpacity={0.7}
             >
               <View style={styles.essentialActionContent}>
-                <View style={[styles.essentialActionIcon, { backgroundColor: '#F1F5F9' }]}>
-                  <Ionicons name="person" size={26} color="#475569" />
+                <View style={[styles.essentialActionIcon, { backgroundColor: '#EFF6FF' }]}>
+                  <Ionicons name="chatbubble-ellipses" size={26} color="#2563EB" />
                 </View>
-                <Text style={styles.essentialActionTitle}>Profile</Text>
-                <Text style={styles.essentialActionSubtitle}>Account settings</Text>
+                <Text style={styles.essentialActionTitle}>AI Assistant</Text>
+                <Text style={styles.essentialActionSubtitle}>Chat & Ask</Text>
               </View>
             </TouchableOpacity>
           </View>
@@ -787,16 +799,17 @@ export default function HomeScreen() {
         }}
         expenses={transactions.map(t => ({
           id: t.id || '',
+          userId: t.userId || 'current-user',
           title: t.title || t.description || 'Transaction',
           amount: t.amount,
           category: t.category || '',
           date: t.date,
           description: t.description || t.title || '',
-          source: t.source || 'manual',
+          source: t.source || 'Manual',
           type: t.type,
-          expense_id: t.id || '',
-          user_id: 'current-user',
-          payment_method: t.paymentMethod || 'Unknown'
+          paymentMethod: t.paymentMethod || 'Unknown',
+          createdAt: t.createdAt || new Date().toISOString(),
+          updatedAt: t.updatedAt || new Date().toISOString()
         }))}
         onDeleteExpense={() => {}}
         onEditExpense={() => {}}
@@ -830,7 +843,7 @@ export default function HomeScreen() {
         onClose={() => setShowSmartSuggestions(false)}
       />
 
-      <SimpleAIInsightsScreen
+      <ProfessionalAIInsightsScreen
         isVisible={showAIInsights}
         onClose={() => setShowAIInsights(false)}
       />
@@ -840,9 +853,13 @@ export default function HomeScreen() {
           visible={showProfileDialog}
           onClose={() => setShowProfileDialog(false)}
           user={user}
-          isDarkTheme={isDarkTheme}
         />
       )}
+
+      <ChatBotDialog
+        visible={showChatBot}
+        onClose={() => setShowChatBot(false)}
+      />
 
       <Toast />
     </View>

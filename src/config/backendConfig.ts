@@ -3,14 +3,20 @@
  * Automatically detects the best backend URL for different environments
  */
 
+import NotificationService from '../services/notificationService';
+import BudgetMonitoringService from '../services/budgetMonitoringService';
+
+// Export services for easy access
+export { NotificationService, BudgetMonitoringService };
+
 // Backend URL options in order of preference (without /api suffix - added by services)
 export const BACKEND_URLS = [
-  'https://finze-backend-fnah.onrender.com',    // Production Render deployment (PRIORITY)
-  'http://10.151.245.202:8001',                 // Local development server
+  'http://172.26.246.73:8001',                 // Local development server (PRIORITY - has all services)
   'http://127.0.0.1:8001',                      // Localhost (for desktop testing)
   'http://localhost:8001',                      // Alternative localhost
   'http://192.168.0.1:8001',                   // Alternative local network IP
   'http://10.0.2.2:8001',                      // Android emulator bridge
+  'https://finze-backend-fnah.onrender.com',    // Production Render deployment (fallback)
 ] as const;
 
 export interface BackendHealthResponse {
@@ -47,10 +53,11 @@ export async function testBackendUrl(url: string, timeout: number = 5000): Promi
     
     if (response.ok) {
       const healthData: BackendHealthResponse = await response.json();
-      // Check if status is healthy and services exist
-      return healthData.status === 'healthy' && 
-             healthData.services && 
-             Object.keys(healthData.services).length > 0;
+      // Check if status is healthy, services exist, and speech service is available
+      const hasServices = healthData.services && Object.keys(healthData.services).length > 0;
+      const hasSpeechService = healthData.services && ('sarvam_speech' in healthData.services);
+      
+      return healthData.status === 'healthy' && hasServices && hasSpeechService;
     }
     
     return false;

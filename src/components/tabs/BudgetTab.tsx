@@ -94,7 +94,12 @@ export const BudgetTab: React.FC<BudgetTabProps> = ({
                expenseCategory.includes(budgetCategory) ||
                budgetCategory.includes(expenseCategory);
       })
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      .reduce((sum, t) => {
+        const amount = typeof t.amount === 'number' && !isNaN(t.amount) 
+          ? t.amount 
+          : 0;
+        return sum + amount;
+      }, 0);
   };
 
   if (!Array.isArray(budgets) || budgets.length === 0) {

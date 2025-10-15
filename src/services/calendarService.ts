@@ -77,7 +77,10 @@ class CalendarServiceClass {
   private generateCalendarMonth(year: number, month: number, transactions: Expense[]): CalendarMonth {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
-    const today = new Date();
+    
+    // Normalize today's date to midnight local time to avoid timezone issues
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
     // Start from Sunday of the week containing the first day
     const startDate = new Date(firstDay);
@@ -94,7 +97,12 @@ class CalendarServiceClass {
     const transactionsByDate = this.groupExpensesByDate(transactions);
     
     while (currentDate <= endDate) {
-      const dateStr = currentDate.toISOString().split('T')[0];
+      // Use local date instead of UTC to avoid timezone issues
+      const year = currentDate.getFullYear();
+      const monthStr = String(currentDate.getMonth() + 1).padStart(2, '0');
+      const day = String(currentDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${monthStr}-${day}`;
+      
       const dayTransactions = transactionsByDate[dateStr] || [];
       
       const isCurrentMonth = currentDate.getMonth() === month;
@@ -172,7 +180,11 @@ class CalendarServiceClass {
     
     expenses.forEach(expense => {
       const date = new Date(expense.date);
-      const dateStr = date.toISOString().split('T')[0];
+      // Use local date instead of UTC to avoid timezone issues
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
       
       if (!grouped[dateStr]) {
         grouped[dateStr] = [];
@@ -193,9 +205,13 @@ class CalendarServiceClass {
   }
 
   private isSameDate(date1: Date, date2: Date): boolean {
-    return date1.getFullYear() === date2.getFullYear() &&
-           date1.getMonth() === date2.getMonth() &&
-           date1.getDate() === date2.getDate();
+    // Normalize dates to local midnight to avoid timezone issues
+    const normalizedDate1 = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate());
+    const normalizedDate2 = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate());
+    
+    return normalizedDate1.getFullYear() === normalizedDate2.getFullYear() &&
+           normalizedDate1.getMonth() === normalizedDate2.getMonth() &&
+           normalizedDate1.getDate() === normalizedDate2.getDate();
   }
 
   /**
@@ -209,11 +225,19 @@ class CalendarServiceClass {
       }
 
       const allExpenses = await getAllExpenses(userId);
-      const dateStr = date.toISOString().split('T')[0];
+      
+      // Use local date instead of UTC to avoid timezone issues
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
       
       const dayExpenses = allExpenses.filter(expense => {
         const expenseDate = new Date(expense.date);
-        const expenseDateStr = expenseDate.toISOString().split('T')[0];
+        const expYear = expenseDate.getFullYear();
+        const expMonth = String(expenseDate.getMonth() + 1).padStart(2, '0');
+        const expDay = String(expenseDate.getDate()).padStart(2, '0');
+        const expenseDateStr = `${expYear}-${expMonth}-${expDay}`;
         return expenseDateStr === dateStr;
       });
 

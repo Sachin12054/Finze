@@ -293,14 +293,68 @@ class NotificationServiceClass {
   /**
    * Send budget alert notification
    */
-  async sendBudgetAlert(category: string, percentage: number): Promise<string> {
-    const title = `Budget Alert: ${category}`;
-    const body = `You've spent ${percentage}% of your ${category} budget this month.`;
+  async sendBudgetAlert(
+    category: string, 
+    percentage: number,
+    spent?: number,
+    total?: number,
+    alertLevel?: 'warning' | 'critical' | 'exceeded'
+  ): Promise<string> {
+    let emoji = '📊';
+    let title = `Budget Alert: ${category}`;
+    let body = `You've spent ${percentage}% of your ${category} budget this month.`;
+
+    // Customize based on alert level
+    if (alertLevel) {
+      switch (alertLevel) {
+        case 'exceeded':
+          emoji = '🚨';
+          title = `${emoji} Budget Exceeded: ${category}`;
+          body = spent && total 
+            ? `You've exceeded your budget! Spent ₹${spent.toLocaleString('en-IN')} of ₹${total.toLocaleString('en-IN')} (${percentage}%)`
+            : `You've exceeded your ${category} budget! (${percentage}%)`;
+          break;
+        case 'critical':
+          emoji = '⚠️';
+          title = `${emoji} Critical Alert: ${category}`;
+          body = spent && total
+            ? `${percentage}% of budget used! ₹${spent.toLocaleString('en-IN')} of ₹${total.toLocaleString('en-IN')}`
+            : `Critical: ${percentage}% of your ${category} budget used!`;
+          break;
+        case 'warning':
+          emoji = '📊';
+          title = `${emoji} Budget Warning: ${category}`;
+          body = spent && total
+            ? `${percentage}% of budget used. ₹${spent.toLocaleString('en-IN')} of ₹${total.toLocaleString('en-IN')}`
+            : `Warning: ${percentage}% of your ${category} budget used.`;
+          break;
+      }
+    }
     
     return this.sendLocalNotification(title, body, {
       type: 'budget_alert',
       category,
-      percentage
+      percentage,
+      spent,
+      total,
+      alertLevel
+    });
+  }
+
+  /**
+   * Schedule daily budget check notification
+   */
+  async scheduleDailyBudgetCheck(time: { hour: number; minute: number } = { hour: 9, minute: 0 }): Promise<string> {
+    return this.scheduleNotification({
+      id: 'daily-budget-check',
+      title: '📊 Daily Budget Check',
+      body: 'Review your spending and stay on track with your budgets today.',
+      data: { type: 'budget_check' },
+      trigger: {
+        type: 'daily',
+        hour: time.hour,
+        minute: time.minute,
+      }
     });
   }
 

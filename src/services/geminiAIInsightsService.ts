@@ -1,4 +1,5 @@
-﻿import { getAllExpenses } from './databaseService';
+﻿import { getDefaultBackendUrl } from '../config/backendConfig';
+import { getAllExpenses } from './databaseService';
 
 export interface AIInsights {
   summary: string;
@@ -26,8 +27,7 @@ export interface AIInsights {
 }
 
 class GeminiAIInsightsService {
-  private readonly API_KEY = 'AIzaSyDKQzJfaHZCH-HKUajkQ8PNa8A4yzl4YaE';
-  private readonly GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+  private readonly BACKEND_URL = getDefaultBackendUrl();
 
   /**
    * Filter transactions to only include expenses (exclude income)
@@ -146,41 +146,50 @@ class GeminiAIInsightsService {
 
   private async generateGeminiAnalysis(expenses: any[], metrics: any, period: string) {
     try {
-      const prompt = this.createAnalysisPrompt(expenses, metrics, period);
-      
-      const response = await fetch(`${this.GEMINI_URL}?key=${this.API_KEY}`, {
+      // Call backend API instead of Gemini directly
+      const response = await fetch(`${this.BACKEND_URL}/api/ai-insights/backend-analysis`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: prompt
-            }]
-          }]
+          expenses: expenses.slice(0, 10), // Send only last 10 for analysis
+          metrics: {
+            totalSpent: metrics.totalSpent,
+            totalTransactions: metrics.totalTransactions,
+            avgTransactionAmount: metrics.avgTransactionAmount,
+            categoryBreakdown: metrics.categoryBreakdown
+          },
+          period
         })
       });
 
       if (!response.ok) {
-        throw new Error(`Gemini API error: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`❌ Backend API error (${response.status}):`, errorText);
+        throw new Error(`Backend API error: ${response.status}`);
       }
 
       const data = await response.json();
       
-      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-        const aiResponse = data.candidates[0].content.parts[0].text;
-        return this.parseGeminiResponse(aiResponse);
+      if (data.status === 'success' && data.data) {
+        return {
+          summary: data.data.summary || null,
+          recommendations: data.data.recommendations || null,
+          spendingTrends: data.data.spending_trends || data.data.spendingTrends || null,
+          budgetSuggestions: data.data.budget_suggestions || data.data.budgetSuggestions || null
+        };
       }
 
-      throw new Error('Invalid response from Gemini API');
+      throw new Error('Invalid response from backend');
     } catch (error) {
-      console.error('❌ Error calling Gemini API:', error);
+      console.error('❌ Error calling backend API:', error);
+      // Return fallback analysis instead of null
       return {
-        summary: null,
-        recommendations: null,
-        spendingTrends: null,
-        budgetSuggestions: null
+        summary: `You've spent ₹${metrics.totalSpent.toFixed(2)} across ${metrics.totalTransactions} transactions this ${period}.`,
+        recommendations: this.generateBasicRecommendations(metrics),
+        spendingTrends: this.generateBasicTrends(metrics, period),
+        budgetSuggestions: this.generateBasicBudgetSuggestions(metrics)
       };
     }
   }
@@ -190,37 +199,31 @@ class GeminiAIInsightsService {
       .map(([cat, amount]) => `${cat}: ₹${(amount as number).toFixed(2)}`)
       .join(', ');
 
-    return `
-Analyze the following financial data for ${period} period and provide insights in JSON format:
+    // Limit to 5 recent transactions to keep prompt size manageable
+    const recentTransactions = expenses.slice(0, 5).map(exp => {
+      const title = (exp.title || exp.description || 'Transaction').substring(0, 50);
+      return `- ${title}: ₹${exp.amount} (${exp.category || exp.type || 'Other'})`;
+    }).join('\n');
 
-Financial Summary:
-- Total Spent: ₹${metrics.totalSpent.toFixed(2)}
-- Total Transactions: ${metrics.totalTransactions}
-- Average Transaction: ₹${metrics.avgTransactionAmount.toFixed(2)}
-- Categories: ${categoryData}
+    return `Analyze this financial data for ${period} and provide insights in JSON format:
 
-Recent Transactions (last 5):
-${expenses.slice(0, 5).map(exp => 
-  `- ${exp.title || exp.description || 'Transaction'}: ₹${exp.amount} (${exp.category || exp.type || 'Other'})`
-).join('\n')}
+Total Spent: ₹${metrics.totalSpent.toFixed(2)}
+Transactions: ${metrics.totalTransactions}
+Average: ₹${metrics.avgTransactionAmount.toFixed(2)}
+Categories: ${categoryData}
 
-Please provide analysis in this exact JSON format:
+Recent:
+${recentTransactions}
+
+Provide analysis in this JSON format:
 {
-  "summary": "A brief 2-3 sentence summary of spending patterns",
-  "recommendations": ["3-4 actionable recommendations for better financial management"],
-  "spendingTrends": "Analysis of spending trends and patterns",
-  "budgetSuggestions": ["3-4 specific budget suggestions based on the data"]
+  "summary": "Brief 2-3 sentence summary",
+  "recommendations": ["3-4 actionable tips"],
+  "spendingTrends": "Trend analysis",
+  "budgetSuggestions": ["3-4 budget tips"]
 }
 
-Focus on:
-1. Spending patterns and trends
-2. Category-wise analysis
-3. Practical recommendations for saving money
-4. Budget optimization suggestions
-5. Areas of concern or opportunity
-
-Respond only with valid JSON, no additional text.
-`;
+Respond with valid JSON only.`;
   }
 
   private parseGeminiResponse(response: string) {

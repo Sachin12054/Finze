@@ -753,7 +753,9 @@ const ScannerDialog: React.FC<ScannerDialogProps> = ({
       itemsSubtotal = editableData.items.reduce((sum: number, item: any) => {
         const itemPrice = safeParseFloat(item.price || item.total_price || item.unit_price || item.amount || 0);
         const itemQuantity = parseInt(item.quantity || '1') || 1;
-        return sum + (itemPrice * itemQuantity);
+        const lineTotal = itemPrice * itemQuantity;
+        const validLineTotal = typeof lineTotal === 'number' && !isNaN(lineTotal) ? lineTotal : 0;
+        return sum + validLineTotal;
       }, 0);
     }
     

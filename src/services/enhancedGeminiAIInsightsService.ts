@@ -29,7 +29,7 @@ export interface AIInsights {
 
 class EnhancedGeminiAIInsightsService {
   private readonly API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY || '';
-  private readonly GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
+  private readonly GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   /**
    * Filter transactions to only include expenses (exclude income)
@@ -401,6 +401,16 @@ class EnhancedGeminiAIInsightsService {
 
       const prompt = this.buildEnhancedAnalysisPrompt(expenses, metrics, timeBasedAnalysis, spendingInsights, period);
       
+      // Debug prompt information
+      console.log('📝 Prompt length:', prompt.length);
+      console.log('📋 Prompt preview (first 200 chars):', prompt.substring(0, 200) + '...');
+      
+      // If prompt is too long, use a simpler one
+      const finalPrompt = prompt.length > 8000 ? this.buildSimplePrompt(metrics) : prompt;
+      if (finalPrompt !== prompt) {
+        console.log('⚠️ Using simplified prompt due to length');
+      }
+      
       // Use withTimeout utility to wrap the API call
       const result = await safeAsync(
         () => withTimeout(
@@ -413,23 +423,31 @@ class EnhancedGeminiAIInsightsService {
             body: JSON.stringify({
               contents: [{
                 parts: [{
-                  text: prompt
+                  text: finalPrompt
                 }]
               }],
               generationConfig: {
-                temperature: 0.7,
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 1024,
+                temperature: 0.3,
+                topK: 1,
+                topP: 1,
+                maxOutputTokens: 2048,
               },
               safetySettings: [
                 {
                   category: "HARM_CATEGORY_HARASSMENT",
-                  threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                  threshold: "BLOCK_ONLY_HIGH"
                 },
                 {
                   category: "HARM_CATEGORY_HATE_SPEECH",
-                  threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                  threshold: "BLOCK_ONLY_HIGH"
+                },
+                {
+                  category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                  threshold: "BLOCK_ONLY_HIGH"
+                },
+                {
+                  category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+                  threshold: "BLOCK_ONLY_HIGH"
                 }
               ]
             })
@@ -459,10 +477,33 @@ class EnhancedGeminiAIInsightsService {
       }
 
       const data = await response.json();
-      const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      
+      // Better debugging for empty responses
+      if (!data.candidates || data.candidates.length === 0) {
+        console.warn('❌ No candidates in Gemini API response');
+        console.log('🔍 Full response:', JSON.stringify(data, null, 2));
+        return this.generateFallbackAnalysis(metrics, spendingInsights);
+      }
+
+      const candidate = data.candidates[0];
+      if (!candidate.content) {
+        console.warn('❌ No content in Gemini API candidate');
+        console.log('🔍 Candidate details:', JSON.stringify(candidate, null, 2));
+        
+        // Check if content was blocked by safety filters
+        if (candidate.finishReason === 'SAFETY') {
+          console.warn('⚠️ Content was blocked by safety filters');
+          console.log('🛡️ Safety ratings:', candidate.safetyRatings);
+        }
+        
+        return this.generateFallbackAnalysis(metrics, spendingInsights);
+      }
+
+      const aiText = candidate.content.parts?.[0]?.text || '';
       
       if (!aiText) {
-        console.warn('❌ Empty response from Gemini API');
+        console.warn('❌ Empty text in Gemini API response parts');
+        console.log('🔍 Content parts:', JSON.stringify(candidate.content.parts, null, 2));
         return this.generateFallbackAnalysis(metrics, spendingInsights);
       }
 
@@ -472,6 +513,27 @@ class EnhancedGeminiAIInsightsService {
       console.warn('❌ Gemini API call failed. Using fallback analysis:', error instanceof Error ? error.message : 'Unknown error');
       return this.generateFallbackAnalysis(metrics, spendingInsights);
     }
+  }
+
+  private buildSimplePrompt(metrics: any): string {
+    const totalSpent = metrics.totalSpent || 0;
+    const topCategory = Object.entries(metrics.categoryBreakdown)
+      .sort(([,a], [,b]) => (b as number) - (a as number))[0];
+    
+    return `Analyze this spending data and provide financial insights in JSON format:
+
+Total Spent: ₹${totalSpent.toFixed(2)}
+Top Category: ${topCategory ? `${topCategory[0]} (₹${(topCategory[1] as number).toFixed(2)})` : 'None'}
+Expense Count: ${metrics.expenseCount || 0}
+
+Respond with valid JSON containing:
+{
+  "summary": "Brief spending summary",
+  "insights": ["insight1", "insight2"],
+  "recommendations": ["recommendation1", "recommendation2"],
+  "categoryAnalysis": {},
+  "budgetSuggestions": []
+}`;
   }
 
   private buildEnhancedAnalysisPrompt(expenses: any[], metrics: any, timeBasedAnalysis: any, spendingInsights: any, period: string): string {
